@@ -5,6 +5,29 @@
 
 #include <vk_types.h>
 #include <vector>
+#include <deque>
+#include <functional>
+
+struct DeletionQueue
+{
+	std::deque<std::function<void()>> deletors;
+
+	void push_function(std::function<void()> &&function)
+	{
+		deletors.push_back(function);
+	}
+
+	void flush()
+	{
+		//reverse iterate the deletion queue to execute all the functions
+		for (auto it = deletors.rbegin(); it != deletors.rend(); it++)
+		{
+			(*it)(); //call the function
+		}
+		deletors.clear();
+		
+	}
+};
 
 class VulkanEngine {
 public:
@@ -52,6 +75,14 @@ public:
 	VkSemaphore _presentSemaphore, _renderSemaphore;
 	VkFence _renderFence;
 
+	VkPipelineLayout _trianglePipelineLayout;
+	VkPipeline _trianglePipeline;
+	VkPipeline _redTrianglePipeline;
+
+	int _selectedShader{0};
+
+	DeletionQueue _mainDeletionQueue;
+
 private:
 
 	void init_vulkan();
@@ -65,4 +96,9 @@ private:
 	void init_framebuffers();
 
 	void init_sync_structures();
+
+	//load a shader module from a spir-v file. Returns false if it errors.
+	bool load_shader_module(const char* filePath, VkShaderModule* outShaderModule);
+
+	void init_pipelines();
 };
