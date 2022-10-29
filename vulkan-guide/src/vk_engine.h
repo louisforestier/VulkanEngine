@@ -10,9 +10,12 @@
 #include <functional>
 #include <string>
 
+
 #include <vk_mesh.h>
 
 #include <glm/glm.hpp>
+
+struct SDL_KeyboardEvent;
 
 struct MeshPushConstants
 {
@@ -116,6 +119,13 @@ public:
 	std::unordered_map<std::string,Material> _materials;
 	std::unordered_map<std::string,Mesh> _meshes;
 
+	glm::vec3 _camPos;
+	bool _bQuit;
+	bool _front{};
+	bool _back{};
+	bool _left{};
+	bool _right{};
+
 private:
 
 	void init_vulkan();
@@ -153,4 +163,9 @@ private:
 	//draw function
 	void draw_objects(VkCommandBuffer cmd, RenderObject* first, int count);
 
+	void handle_input();
+
+	void handle_key_down(const SDL_KeyboardEvent& event);
+	
+	void handle_key_up(const SDL_KeyboardEvent& event);
 };

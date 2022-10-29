@@ -635,6 +635,8 @@ void VulkanEngine::upload_mesh(Mesh& mesh)
 
 void VulkanEngine::init_scene()
 {
+	_camPos = { 0.f,-6.f,-10.f};
+
 	RenderObject monkey;
 	monkey.mesh = get_mesh("monkey");
 	monkey.material = get_material("defaultmesh");
@@ -769,29 +771,89 @@ void VulkanEngine::draw()
 
 void VulkanEngine::run()
 {
-	SDL_Event e;
-	bool bQuit = false;
-
+	_bQuit = false;
+	float speed = 0.05f;
 	// main loop
-	while (!bQuit)
+	while (!_bQuit)
 	{
+		glm::vec3 velocity(0.f);
 		// Handle events on queue
-		while (SDL_PollEvent(&e) != 0)
-		{
-			// close the window when user alt-f4s or clicks the X button
-			if (e.type == SDL_QUIT)
-				bQuit = true;
-			else if (e.key.keysym.sym == SDLK_SPACE)
-			{
-				// _selectedShader +=1;
-				// if (_selectedShader > 1)
-				// {
-				// 	_selectedShader = 0;
-				// }				
-			}			
-		}
+		handle_input();
+		if (_front) velocity.z += speed;
+		if (_back)	velocity.z -= speed;
+		if (_left)	velocity.x += speed;
+		if (_right) velocity.x -= speed;
+		_camPos += velocity;
 		draw();
 	}
+}
+
+void VulkanEngine::handle_input()
+{
+	SDL_Event e;
+	while (SDL_PollEvent(&e) != 0)
+	{
+		// close the window when user alt-f4s or clicks the X button
+		switch (e.type)
+		{
+		case SDL_QUIT:
+			_bQuit = true;
+			break;
+		case SDL_KEYDOWN:
+			handle_key_down(e.key);
+			break;
+		case SDL_KEYUP:
+			handle_key_up(e.key);
+			break;
+		default:
+			break;
+		}
+	}
+}
+void VulkanEngine::handle_key_down(const SDL_KeyboardEvent& event)
+{
+	if (event.repeat == 0)
+	{
+		if (event.keysym.scancode == SDL_SCANCODE_W)
+		{
+			_front = true;
+		}
+		if (event.keysym.scancode == SDL_SCANCODE_S)
+		{
+			_back = true;
+		}
+		if (event.keysym.scancode == SDL_SCANCODE_A)
+		{
+			_left = true;
+		}
+		if (event.keysym.scancode == SDL_SCANCODE_D)
+		{
+			_right = true;
+		}
+	}	
+}
+	
+void VulkanEngine::handle_key_up(const SDL_KeyboardEvent& event)
+{
+	if (event.repeat == 0)
+	{
+		if (event.keysym.scancode == SDL_SCANCODE_W)
+		{
+			_front = false;
+		}
+		if (event.keysym.scancode == SDL_SCANCODE_S)
+		{
+			_back = false;
+		}
+		if (event.keysym.scancode == SDL_SCANCODE_A)
+		{
+			_left = false;
+		}
+		if (event.keysym.scancode == SDL_SCANCODE_D)
+		{
+			_right = false;
+		}
+	}	
 }
 
 
@@ -834,9 +896,8 @@ void VulkanEngine::draw_objects(VkCommandBuffer cmd, RenderObject* first, int co
 {
 	//make model view matrix
 	//camera view 
-	glm::vec3 camPos = { 0.f,-6.f,-10.f};
 
-	glm::mat4 view = glm::translate(glm::mat4(1.f),camPos);
+	glm::mat4 view = glm::translate(glm::mat4(1.f),_camPos);
 
 	//camera projection
 	glm::mat4 projection = glm::perspective(glm::radians(70.f),1700.f/900.f,0.1f,200.f);
