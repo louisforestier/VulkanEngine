@@ -101,23 +101,9 @@ public:
 	VkSemaphore _presentSemaphore, _renderSemaphore;
 	VkFence _renderFence;
 
-	VkPipelineLayout _trianglePipelineLayout;
-	VkPipeline _trianglePipeline;
-	VkPipeline _redTrianglePipeline;
-
-	int _selectedShader{0};
-
 	DeletionQueue _mainDeletionQueue;
 
 	VmaAllocator _allocator;
-
-	VkPipeline _meshPipeline;
-
-	Mesh _triangleMesh;
-
-	VkPipelineLayout _meshPipelineLayout;
-
-	Mesh _monkeyMesh;
 
 	VkImageView _depthImageView;
 	AllocatedImage _depthImage;
