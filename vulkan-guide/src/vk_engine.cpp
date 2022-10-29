@@ -722,6 +722,8 @@ void VulkanEngine::draw()
 
 	vkCmdBeginRenderPass(cmd, &rpInfo, VK_SUBPASS_CONTENTS_INLINE);	
 
+	sort_renderables();
+
 	draw_objects(cmd,_renderables.data(),_renderables.size());
 
 	// finalize the render pass
@@ -892,6 +894,21 @@ Mesh* VulkanEngine::get_mesh(const std::string& name)
 	}		
 }
 
+void VulkanEngine::sort_renderables()
+{
+	std::sort(_renderables.begin(),_renderables.end(),[](const RenderObject& a, const RenderObject& b){
+		if (a.material<b.material)
+		{
+			return true;
+		}
+		if (a.material == b.material)
+		{
+			return a.mesh<b.mesh;
+		}
+		return false;
+	});	
+}
+
 void VulkanEngine::draw_objects(VkCommandBuffer cmd, RenderObject* first, int count)
 {
 	//make model view matrix
@@ -906,7 +923,7 @@ void VulkanEngine::draw_objects(VkCommandBuffer cmd, RenderObject* first, int co
 
 	Mesh* lastMesh = nullptr;
 	Material* lastMaterial = nullptr;
-
+	
 	for (int i = 0; i < count; i++)
 	{
 		RenderObject& object = first[i];

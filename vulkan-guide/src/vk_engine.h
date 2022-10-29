@@ -160,6 +160,8 @@ private:
 	//return nullptr if it can't be found
 	Mesh* get_mesh(const std::string& name);
 
+	void sort_renderables();	
+
 	//draw function
 	void draw_objects(VkCommandBuffer cmd, RenderObject* first, int count);
 
