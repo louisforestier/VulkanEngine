@@ -12,6 +12,7 @@
 
 
 #include <vk_mesh.h>
+#include <vk_types.h>
 
 #include <glm/glm.hpp>
 
@@ -20,7 +21,7 @@ struct SDL_KeyboardEvent;
 struct MeshPushConstants
 {
 	glm::vec4 data;
-	glm::mat4 render_matrix;
+	glm::mat4 model;
 };
 
 
@@ -36,6 +37,45 @@ struct RenderObject
 	Material* material;
 	glm::mat4 transformMatrix;
 };
+
+struct GPUCameraData
+{
+	glm::mat4 view;
+	glm::mat4 proj;
+	glm::mat4 viewproj;
+};
+
+struct GPUSceneData{
+	glm::vec4 fogColor; //w is for exponent
+	glm::vec4 fogDistances; //x for min, y for max, zw unused but needed for alignement
+	glm::vec4 ambientColor;
+	glm::vec4 sunlightDirection; //w for sun power
+	glm::vec4 sunlightColor;
+};
+
+
+struct FrameData
+{
+	VkSemaphore _presentSemaphore, _renderSemaphore;
+	VkFence _renderFence;
+
+	VkCommandPool _commandPool;
+	VkCommandBuffer _mainCommandBuffer;
+
+	//buffer that holds a single GPUCameraData to use when rendering
+	AllocatedBuffer _cameraBuffer;
+	VkDescriptorSet _globalDescriptor;
+
+	AllocatedBuffer _objectBuffer;
+	VkDescriptorSet __objectDescriptor;
+};
+
+struct GPUObjectData
+{
+	glm::mat4 modelMatrix;
+};
+
+
 
 struct DeletionQueue
 {
@@ -57,6 +97,10 @@ struct DeletionQueue
 		
 	}
 };
+
+//number of frames to overlap when rendering
+//2 or 3 at most, 1 to disable double buffering
+constexpr unsigned int FRAME_OVERLAP = 2;
 
 class VulkanEngine {
 public:
@@ -95,14 +139,10 @@ public:
 	VkQueue _graphicsQueue; // queue we will submit to
 	uint32_t _graphicsQueueFamily; // family of that queue
 
-	VkCommandPool _commandPool; // Pool containing our commands
-	VkCommandBuffer _mainCommandBuffer; // the buffer we will record into
-
 	VkRenderPass _renderPass;
 	std::vector<VkFramebuffer> _framebuffers;
 
-	VkSemaphore _presentSemaphore, _renderSemaphore;
-	VkFence _renderFence;
+	FrameData _frames[FRAME_OVERLAP];
 
 	DeletionQueue _mainDeletionQueue;
 
@@ -113,11 +153,21 @@ public:
 
 	VkFormat _depthFormat;
 
+	VkDescriptorSetLayout _globalSetLayout;
+	VkDescriptorPool _descriptorPool;
+
+	VkDescriptorSetLayout _objectSetLayout;
+
+	VkPhysicalDeviceProperties _gpuProperties;
+
 	//default array of renderable objects
 	std::vector<RenderObject> _renderables;
 
 	std::unordered_map<std::string,Material> _materials;
 	std::unordered_map<std::string,Mesh> _meshes;
+
+	GPUSceneData _sceneParameters;
+	AllocatedBuffer _sceneParametersBuffer;
 
 	glm::vec3 _camPos;
 	bool _bQuit;
@@ -145,6 +195,8 @@ private:
 	//load a shader module from a spir-v file. Returns false if it errors.
 	bool load_shader_module(const char* filePath, VkShaderModule* outShaderModule);
 
+	void init_descriptors();
+
 	void init_pipelines();
 
 	void load_meshes();
@@ -159,6 +211,13 @@ private:
 
 	//return nullptr if it can't be found
 	Mesh* get_mesh(const std::string& name);
+
+	FrameData& get_current_frame();
+
+	AllocatedBuffer create_buffer(size_t allocSize,VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage);
+
+	size_t pad_uniform_buffer_size(size_t originalSize);
+	
 
 	void sort_renderables();	
 
