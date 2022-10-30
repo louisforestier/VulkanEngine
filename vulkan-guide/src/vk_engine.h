@@ -3,7 +3,6 @@
 
 #pragma once
 
-#include <vk_types.h>
 #include <vector>
 #include <deque>
 #include <unordered_map>
@@ -12,6 +11,7 @@
 
 
 #include <vk_mesh.h>
+#include <vk_textures.h>
 #include <vk_types.h>
 
 #include <glm/glm.hpp>
@@ -27,6 +27,7 @@ struct MeshPushConstants
 
 struct Material
 {
+	VkDescriptorSet textureSet{VK_NULL_HANDLE}; //texture defaulted to null
 	VkPipeline pipeline;
 	VkPipelineLayout pipelineLayout;
 };
@@ -75,6 +76,14 @@ struct GPUObjectData
 	glm::mat4 modelMatrix;
 };
 
+struct UploadContext
+{
+	VkFence _uploadFence;
+	VkCommandPool _commandPool;
+	VkCommandBuffer _commandBuffer;
+};
+
+
 
 
 struct DeletionQueue
@@ -101,6 +110,8 @@ struct DeletionQueue
 //number of frames to overlap when rendering
 //2 or 3 at most, 1 to disable double buffering
 constexpr unsigned int FRAME_OVERLAP = 2;
+
+struct Texture;
 
 class VulkanEngine {
 public:
@@ -157,6 +168,8 @@ public:
 	VkDescriptorPool _descriptorPool;
 
 	VkDescriptorSetLayout _objectSetLayout;
+	
+	VkDescriptorSetLayout _singleTextureSetLayout;
 
 	VkPhysicalDeviceProperties _gpuProperties;
 
@@ -169,12 +182,20 @@ public:
 	GPUSceneData _sceneParameters;
 	AllocatedBuffer _sceneParametersBuffer;
 
+	UploadContext _uploadContext;
+
+	std::unordered_map<std::string,Texture> _loadedTextures;
+
 	glm::vec3 _camPos;
 	bool _bQuit;
 	bool _front{};
 	bool _back{};
 	bool _left{};
 	bool _right{};
+
+	AllocatedBuffer create_buffer(size_t allocSize,VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage);
+
+	void immediate_submit(std::function<void(VkCommandBuffer cmd)>&& function);
 
 private:
 
@@ -203,6 +224,8 @@ private:
 
 	void upload_mesh(Mesh& mesh);
 
+	void load_images();
+
 	//create material and add it to the map
 	Material* create_material(VkPipeline pipeline, VkPipelineLayout layout, const std::string& name);
 
@@ -214,10 +237,7 @@ private:
 
 	FrameData& get_current_frame();
 
-	AllocatedBuffer create_buffer(size_t allocSize,VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage);
-
 	size_t pad_uniform_buffer_size(size_t originalSize);
-	
 
 	void sort_renderables();	
 
