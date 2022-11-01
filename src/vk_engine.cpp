@@ -3,6 +3,10 @@
 #include <SDL.h>
 #include <SDL_vulkan.h>
 
+#include <imgui.h>
+#include <imgui_impl_sdl.h>
+#include <imgui_impl_vulkan.h>
+
 #include <vk_initializers.h>
 
 #include "VkBootstrap.h"
@@ -64,6 +68,8 @@ void VulkanEngine::init()
 	init_descriptors();
 
 	init_pipelines();
+
+	init_imgui();
 
 	load_images();
 
@@ -128,6 +134,71 @@ void VulkanEngine::init_vulkan()
 	_gpuProperties = vkbDevice.physical_device.properties;
 
 	std::cout << " The GPU has a minimum buffer alignment of " << _gpuProperties.limits.minUniformBufferOffsetAlignment << std::endl;
+}
+
+void VulkanEngine::init_imgui()
+{
+	//1: create descriptor pool for imgui
+	//the size of the pool is very oversize, but it's copied from imgui demo itself
+	VkDescriptorPoolSize poolSizes[]={
+		{ VK_DESCRIPTOR_TYPE_SAMPLER, 1000 },
+		{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000 },
+		{ VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1000 },
+		{ VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1000 },
+		{ VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 1000 },
+		{ VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 1000 },
+		{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1000 },
+		{ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1000 },
+		{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1000 },
+		{ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1000 },
+		{ VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1000 }
+	};
+
+	VkDescriptorPoolCreateInfo poolInfo{};
+	poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+	poolInfo.pNext = nullptr;
+	poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+	poolInfo.maxSets = 1000;
+	poolInfo.poolSizeCount = std::size(poolSizes);
+	poolInfo.pPoolSizes = poolSizes;
+
+	VkDescriptorPool imguiPool;
+	VK_CHECK(vkCreateDescriptorPool(_device,&poolInfo,nullptr,&imguiPool));
+
+	//2: initialize imgui library
+
+	//this initializes the core structures of imgui
+	ImGui::CreateContext();
+
+	//this initializes imgui for sdl
+	ImGui_ImplSDL2_InitForVulkan(_window);
+
+	//this initializes imgui for Vulkan
+	ImGui_ImplVulkan_InitInfo initInfo{};
+	initInfo.Instance = _instance;
+	initInfo.PhysicalDevice = _chosenGPU;
+	initInfo.Device = _device;
+	initInfo.Queue = _graphicsQueue;
+	initInfo.DescriptorPool = imguiPool;
+	initInfo.MinImageCount = 3;
+	initInfo.ImageCount = 3;
+	initInfo.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+
+	ImGui_ImplVulkan_Init(&initInfo,_renderPass);
+	
+	//execute a gpu command to upload imgui font textures
+	immediate_submit([&](VkCommandBuffer cmd){
+		ImGui_ImplVulkan_CreateFontsTexture(cmd);
+	});
+
+	//clear font textures from cpu data
+	ImGui_ImplVulkan_DestroyFontUploadObjects();
+
+	//add the destruction of the imgui created structures
+	_mainDeletionQueue.push_function([=](){
+		vkDestroyDescriptorPool(_device, imguiPool, nullptr);
+		ImGui_ImplVulkan_Shutdown();
+	});
 }
 
 void VulkanEngine::init_swapchain()
@@ -976,6 +1047,8 @@ void VulkanEngine::cleanup()
 
 void VulkanEngine::draw()
 {
+	ImGui::Render();
+
 	// wait until the gpu has finished rendering the last frame, Timeout of 1 seconds.
 	VK_CHECK(vkWaitForFences(_device, 1, &get_current_frame()._renderFence, true, 1000000000));
 	VK_CHECK(vkResetFences(_device, 1, &get_current_frame()._renderFence));
@@ -1016,6 +1089,8 @@ void VulkanEngine::draw()
 	sort_renderables();
 
 	draw_objects(cmd,_renderables.data(),_renderables.size());
+
+	ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(),cmd);
 
 	// finalize the render pass
 	vkCmdEndRenderPass(cmd);
@@ -1071,38 +1146,48 @@ void VulkanEngine::run()
 	{
 		glm::vec3 velocity(0.f);
 		// Handle events on queue
-		handle_input();
+		SDL_Event e;
+		while (SDL_PollEvent(&e) != 0)
+		{
+			ImGui_ImplSDL2_ProcessEvent(&e);
+			handle_event(e);
+		}
 		if (_front) velocity.z += speed;
 		if (_back)	velocity.z -= speed;
 		if (_left)	velocity.x += speed;
 		if (_right) velocity.x -= speed;
 		_camPos += velocity;
+		ImGui_ImplVulkan_NewFrame();
+		ImGui_ImplSDL2_NewFrame(_window);
+
+		ImGui::NewFrame();
+		
+		//imgui commands
+		ImGui::ShowDemoWindow();
+
 		draw();
 	}
 }
 
-void VulkanEngine::handle_input()
+void VulkanEngine::handle_event(const SDL_Event& e)
 {
-	SDL_Event e;
-	while (SDL_PollEvent(&e) != 0)
+	// close the window when user alt-f4s or clicks the X button
+	switch (e.type)
 	{
-		// close the window when user alt-f4s or clicks the X button
-		switch (e.type)
-		{
-		case SDL_QUIT:
-			_bQuit = true;
-			break;
-		case SDL_KEYDOWN:
-			handle_key_down(e.key);
-			break;
-		case SDL_KEYUP:
-			handle_key_up(e.key);
-			break;
-		default:
-			break;
-		}
+	case SDL_QUIT:
+		_bQuit = true;
+		break;
+	case SDL_KEYDOWN:
+		handle_key_down(e.key);
+		break;
+	case SDL_KEYUP:
+		handle_key_up(e.key);
+		break;
+	default:
+		break;
 	}
 }
+
 void VulkanEngine::handle_key_down(const SDL_KeyboardEvent& event)
 {
 	if (event.repeat == 0)

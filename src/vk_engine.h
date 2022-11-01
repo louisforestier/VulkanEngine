@@ -16,6 +16,7 @@
 
 #include <glm/glm.hpp>
 
+union SDL_Event;
 struct SDL_KeyboardEvent;
 
 struct MeshPushConstants
@@ -201,6 +202,8 @@ private:
 
 	void init_vulkan();
 
+	void init_imgui();
+
 	void init_swapchain();
 
 	void init_commands();
@@ -244,7 +247,7 @@ private:
 	//draw function
 	void draw_objects(VkCommandBuffer cmd, RenderObject* first, int count);
 
-	void handle_input();
+	void handle_event(const SDL_Event& e);
 
 	void handle_key_down(const SDL_KeyboardEvent& event);
 	
