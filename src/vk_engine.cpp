@@ -1,5 +1,8 @@
 ﻿#include "vk_engine.h"
-
+#include "vk_instance_builder.h"
+#include "vk_device_selector.h"
+#include "vk_device_builder.h"
+#include "vk_swapchain.h"
 #include <SDL.h>
 #include <SDL_vulkan.h>
 
@@ -22,17 +25,11 @@
 #define VMA_IMPLEMENTATION
 #include <vk_mem_alloc.h>
 
-//we want to immediately abort when there is an error. In normal engines this would give an error message to the user, or perform a dump of state.
-#define VK_CHECK(x)                                                 \
-	do                                                              \
-	{                                                               \
-		VkResult err = x;                                           \
-		if (err)                                                    \
-		{                                                           \
-			std::cout <<"Detected Vulkan error: " << err << std::endl; \
-			abort();                                                \
-		}                                                           \
-	} while (0)
+#ifndef NDEBUG
+constexpr bool enableValidationLayers = false;
+#else
+constexpr bool enableValidationLayers = true;
+#endif
 
 #pragma region init
 
@@ -81,44 +78,53 @@ void VulkanEngine::init()
 	_isInitialized = true;
 }
 
+
+
 void VulkanEngine::init_vulkan()
 {
-	vkb::InstanceBuilder builder;
-
+	unsigned int nbExtensions;
+	SDL_Vulkan_GetInstanceExtensions(_window,&nbExtensions,nullptr);
+	std::vector<const char*> extensions(nbExtensions);
+	SDL_Vulkan_GetInstanceExtensions(_window,&nbExtensions,extensions.data());
+	VulkanInstanceBuilder builder;
+	
 	// make the vulkan instance, with basic debug features
-	vkb::Instance vkb_inst = builder.set_app_name("Example Vulkan Application")
-								 .request_validation_layers(true)
-								 .require_api_version(1, 1, 0)
-								 .use_default_debug_messenger()
-								 .build()
-								 .value();
+	VulkanInstance vbInst = builder.setAppName("VulkanEngine Demo")
+													   .enableValidationLayers(enableValidationLayers)
+													   .setApiVersion(1, 1, 0)
+													   .addExtensions(extensions)
+													   .setEngineName("ForestierEngiiiine")
+													   .build()
+													   .value();
 
-	_instance = vkb_inst.instance;
-	_debug_messenger = vkb_inst.debug_messenger;
+	_instance = vbInst._instance;
+	_debug_messenger = vbInst._debugMessenger;
 
 	// get the surface of the window we opened with SDL
 	SDL_Vulkan_CreateSurface(_window, _instance, &_surface);
 
 	// Select a gpu that can write to the SDL surface and supports Vulkan 1.1
-	vkb::PhysicalDeviceSelector selector{vkb_inst};
-	vkb::PhysicalDevice physicalDevice = selector
-											 .set_minimum_version(1, 1)
-											 .set_surface(_surface)
-											 .select()
-											 .value();
+	VulkanDeviceSelector selector(vbInst,_surface);
 
-	vkb::DeviceBuilder deviceBuilder{physicalDevice};
+	VulkanPhysicalDevice physicalDevice = selector
+											.setApiVersion(1, 1, 0)
+											.select()
+											.value();
+
+	VulkanDeviceBuilder deviceBuilder(physicalDevice);
 	VkPhysicalDeviceShaderDrawParametersFeatures shaderDrawParametersFeatures{};
 	shaderDrawParametersFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DRAW_PARAMETERS_FEATURES;
 	shaderDrawParametersFeatures.pNext = nullptr;
 	shaderDrawParametersFeatures.shaderDrawParameters = VK_TRUE;
-	vkb::Device vkbDevice = deviceBuilder.add_pNext(&shaderDrawParametersFeatures).build().value();
+	VulkanDevice dev = deviceBuilder.addPNext(&shaderDrawParametersFeatures).build().value();
 
-	_device = vkbDevice.device;
-	_chosenGPU = physicalDevice.physical_device;
+	_device = dev._device;
+	_chosenGPU = physicalDevice._device;
 
-	_graphicsQueue = vkbDevice.get_queue(vkb::QueueType::graphics).value();
-	_graphicsQueueFamily = vkbDevice.get_queue_index(vkb::QueueType::graphics).value();
+	_graphicsQueueFamily = physicalDevice._graphicsQueueFamily;
+	_presentQueueFamily = physicalDevice._presentQueueFamily;
+    vkGetDeviceQueue(_device, _graphicsQueueFamily, 0, &_graphicsQueue);
+    vkGetDeviceQueue(_device, _presentQueueFamily, 0, &_presentQueue);
 
 	//initialize the memory allocator
 	VmaAllocatorCreateInfo allocatorInfo{};
@@ -131,7 +137,7 @@ void VulkanEngine::init_vulkan()
 		vmaDestroyAllocator(_allocator);
 	});
 
-	_gpuProperties = vkbDevice.physical_device.properties;
+	_gpuProperties = physicalDevice._properties;
 
 	std::cout << " The GPU has a minimum buffer alignment of " << _gpuProperties.limits.minUniformBufferOffsetAlignment << std::endl;
 }
@@ -203,20 +209,19 @@ void VulkanEngine::init_imgui()
 
 void VulkanEngine::init_swapchain()
 {
-	vkb::SwapchainBuilder swapchainBuilder{_chosenGPU, _device, _surface};
+	VulkanSwapchainBuilder swapchainBuilder(_chosenGPU,_device,_surface, _graphicsQueueFamily,_graphicsQueueFamily);
 
-	vkb::Swapchain vkbSwapchain = swapchainBuilder
-									  .use_default_format_selection()
+	VulkanSwapchain vkbSwapchain = swapchainBuilder
 									  // use vsync present mode
-									  .set_desired_present_mode(VK_PRESENT_MODE_FIFO_KHR)
-									  .set_desired_extent(_windowExtent.width, _windowExtent.height)
+									  .setPresentMode(VK_PRESENT_MODE_FIFO_KHR)
+									  .setExtent(_windowExtent.width, _windowExtent.height)
 									  .build()
 									  .value();
 
-	_swapchain = vkbSwapchain.swapchain;
-	_swapchainImages = vkbSwapchain.get_images().value();
-	_swapchainImageViews = vkbSwapchain.get_image_views().value();
-	_swapchainImageFormat = vkbSwapchain.image_format;
+	_swapchain = vkbSwapchain._swapchain;
+	_swapchainImages = vkbSwapchain._images;
+	_swapchainImageViews = vkbSwapchain._imagesviews;
+	_swapchainImageFormat = vkbSwapchain._imageFormat;
 
 	_mainDeletionQueue.push_function([=](){
 		vkDestroySwapchainKHR(_device,_swapchain,nullptr);
@@ -1038,7 +1043,11 @@ void VulkanEngine::cleanup()
 		
 		vkDestroyDevice(_device, nullptr);
 		vkDestroySurfaceKHR(_instance, _surface, nullptr);
-		vkb::destroy_debug_utils_messenger(_instance, _debug_messenger);
+		if (enableValidationLayers)
+        {
+            VulkanInstanceBuilder::DestroyDebugUtilsMessengerEXT(_instance, _debug_messenger, nullptr);
+        }
+
 		vkDestroyInstance(_instance, nullptr);
 
 		SDL_DestroyWindow(_window);
@@ -1163,7 +1172,7 @@ void VulkanEngine::run()
 		ImGui::NewFrame();
 		
 		//imgui commands
-		ImGui::ShowDemoWindow();
+		ImGui::ShowMetricsWindow();
 
 		draw();
 	}

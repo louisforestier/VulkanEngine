@@ -150,6 +150,8 @@ public:
 
 	VkQueue _graphicsQueue; // queue we will submit to
 	uint32_t _graphicsQueueFamily; // family of that queue
+	VkQueue _presentQueue; // queue we will present to
+	uint32_t _presentQueueFamily; // family of that queue
 
 	VkRenderPass _renderPass;
 	std::vector<VkFramebuffer> _framebuffers;

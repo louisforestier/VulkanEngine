@@ -10,6 +10,14 @@ add_executable(vulkan_guide
     vk_mesh.h
     vk_textures.cpp
     vk_textures.h
+    vk_swapchain.cpp
+    vk_swapchain.h
+    vk_device_builder.cpp
+    vk_device_builder.h
+    vk_device_selector.cpp
+    vk_device_selector.h
+    vk_instance_builder.cpp
+    vk_instance_builder.h
     vk_types.h
     vk_initializers.cpp
     vk_initializers.h)
