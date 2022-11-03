@@ -12,8 +12,6 @@
 
 #include <vk_initializers.h>
 
-#include "VkBootstrap.h"
-
 #include <iostream>
 #include <fstream>
 #include <functional>
