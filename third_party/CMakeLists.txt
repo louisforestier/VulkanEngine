@@ -1,4 +1,5 @@
 find_package(Vulkan REQUIRED)
+include(ExternalProject)
 
 add_library(glm INTERFACE)
 add_library(vma INTERFACE)
@@ -21,6 +22,7 @@ target_include_directories(lz4 PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/lz4" )
 target_include_directories(vma INTERFACE vma)
 target_include_directories(glm INTERFACE glm)
 
+target_include_directories(json INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/nlohmann_json" )
 target_sources(tinyobjloader PRIVATE 
     tinyobjloader/tiny_obj_loader.h
     tinyobjloader/tiny_obj_loader.cc
@@ -56,4 +58,3 @@ target_sources(imgui PRIVATE
 target_link_libraries(imgui PUBLIC Vulkan::Vulkan sdl2)
 
 target_include_directories(stb_image INTERFACE stb_image)
-target_include_directories(json INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/nlohmann_json" )
