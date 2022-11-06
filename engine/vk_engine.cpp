@@ -1062,7 +1062,7 @@ void VulkanEngine::draw()
 
 	// request image from the swapchain, one second timeout
 	uint32_t swapchainImageIndex;
-	VK_CHECK(vkAcquireNextImageKHR(_device, _swapchain, 1000000000, get_current_frame()._presentSemaphore,nullptr,&swapchainImageIndex));
+	VK_CHECK(vkAcquireNextImageKHR(_device, _swapchain, 1000000000, get_current_frame()._presentSemaphore,(VkFence)nullptr,&swapchainImageIndex));
 
 	VkCommandBuffer cmd = get_current_frame()._mainCommandBuffer;
 
@@ -1326,7 +1326,7 @@ void VulkanEngine::draw_objects(VkCommandBuffer cmd, RenderObject* first, int co
 
 	sceneData += pad_uniform_buffer_size(sizeof(GPUSceneData)) * frameIndex;
 
-	mempcpy(sceneData,&_sceneParameters,sizeof(GPUSceneData));
+	memcpy(sceneData,&_sceneParameters,sizeof(GPUSceneData));
 
 	vmaUnmapMemory(_allocator,_sceneParametersBuffer._allocation);
 

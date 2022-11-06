@@ -33,6 +33,7 @@ assets::AssetFile assets::packTexture(assets::TextureInfo* info, void* pixelData
 
     std::string stringified = textureMetadata.dump();
     file.json = stringified;
+    return file;
 }
 
 assets::TextureFormat parse_format(const std::string& format) {
