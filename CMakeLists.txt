@@ -24,6 +24,7 @@ foreach( OUTPUTCONFIG ${CMAKE_CONFIGURATION_TYPES} )
 endforeach( OUTPUTCONFIG CMAKE_CONFIGURATION_TYPES )
 
 add_subdirectory(assetlib)
+add_subdirectory(asset-baker)
 add_subdirectory(engine)
 
 
