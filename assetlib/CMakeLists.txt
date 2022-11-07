@@ -1,6 +1,8 @@
 set(CMAKE_CXX_STANDARD 17)
 # Add source to this project's executable.
 add_library (assetlib  
+"mesh_asset.cpp"
+"mesh_asset.h"
 "texture_asset.h"
 "texture_asset.cpp"
 "asset_loader.h"

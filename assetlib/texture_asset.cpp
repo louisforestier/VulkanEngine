@@ -60,8 +60,8 @@ assets::TextureInfo assets::readTextureInfo(AssetFile* file)
 
     info.pixelsize[0] = textureMetadata["width"];
     info.pixelsize[1] = textureMetadata["height"];
-    info.textureSize = textureMetadata["buffer_size"];
-    info.originalFile = textureMetadata["original_file"];
+    info.textureSize = textureMetadata["bufferSize"];
+    info.originalFile = textureMetadata["originalFile"];
 
     return info;  
 }
@@ -76,6 +76,4 @@ void assets::unpackTexture(TextureInfo* info, const char* sourcebuffer, size_t s
     {
         memcpy(destination,sourcebuffer,sourcesize);
     }
-    
-    
 }
