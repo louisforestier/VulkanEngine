@@ -886,7 +886,7 @@ void VulkanEngine::load_meshes()
 	triangleMesh._vertices[2].color = {0.f,1.f,0.f};
 
 	Mesh monkeyMesh;
-	monkeyMesh.load_from_obj("../assets/monkey_smooth.obj");
+	monkeyMesh.loadFromAsset("../assets/monkey_smooth.mesh");
 
 	Mesh lostEmpire{};
 	lostEmpire.loadFromAsset("../assets/lost_empire.mesh");
