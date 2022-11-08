@@ -889,7 +889,7 @@ void VulkanEngine::load_meshes()
 	monkeyMesh.load_from_obj("../assets/monkey_smooth.obj");
 
 	Mesh lostEmpire{};
-	lostEmpire.load_from_obj("../assets/lost_empire.obj");
+	lostEmpire.loadFromAsset("../assets/lost_empire.mesh");
 
 	//no vertex normals for now
 	upload_mesh(triangleMesh);

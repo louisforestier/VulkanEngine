@@ -26,7 +26,7 @@ assets::MeshInfo assets::readMeshInfo(AssetFile *file)
     info.vertexBufferSize = meshMetaData["vertexBufferSize"];
     info.indexBufferSize = meshMetaData["indexBufferSize"];
     info.indexSize = (uint8_t)meshMetaData["indexSize"];
-    info.originalFile = meshMetaData["originalSize"];
+    info.originalFile = meshMetaData["originalFile"];
 
     std::vector<float> boundsData;
     boundsData.resize(7);
@@ -80,6 +80,7 @@ assets::AssetFile assets::packMesh(MeshInfo *info, char *vertexBuffer, char *ind
     boundsData[4] = info->bounds.extents[0];
     boundsData[5] = info->bounds.extents[1];
     boundsData[6] = info->bounds.extents[2];
+    meshMetadata["bounds"] = boundsData;
 
     AssetFile file;
     file.type[0] = 'M';

@@ -2,6 +2,8 @@
 #include <tiny_obj_loader.h>
 
 #include <vk_mesh.h>
+#include <asset_loader.h>
+#include <mesh_asset.h>
 
 VertexInputDescription Vertex::get_vertex_description()
 {
@@ -129,4 +131,53 @@ bool Mesh::load_from_obj(const char* filename)
         }
     }
     return true;
+}
+
+bool Mesh::loadFromAsset(const char* filename)
+{
+    assets::AssetFile file;
+    bool loaded = assets::loadBinaryFile(filename, file);
+
+    if (!loaded)
+    {
+        std::cerr << "Error when loading mesh " << filename << std::endl;
+        return false;
+    }
+    
+    assets::MeshInfo meshInfo = assets::readMeshInfo(&file);
+
+
+    std::vector<char> vertexBuffer;
+    std::vector<char> indexBuffer;
+
+    vertexBuffer.resize(meshInfo.vertexBufferSize);
+    indexBuffer.resize(meshInfo.indexBufferSize);
+
+    assets::unpackMesh(&meshInfo,file.binaryBlob.data(),file.binaryBlob.size(),vertexBuffer.data(),indexBuffer.data());
+
+    _vertices.clear();
+    
+
+    assets::Vertex* unpackedVertices = reinterpret_cast<assets::Vertex*>(vertexBuffer.data());
+
+    _vertices.resize(vertexBuffer.size() / sizeof(assets::Vertex));
+
+    for (size_t i = 0; i < _vertices.size(); i++)
+    {
+        _vertices[i].position.x = unpackedVertices[i].position[0];
+        _vertices[i].position.y = unpackedVertices[i].position[1];
+        _vertices[i].position.z = unpackedVertices[i].position[2];
+        _vertices[i].normal.x = unpackedVertices[i].normal[0];
+        _vertices[i].normal.y = unpackedVertices[i].normal[1];
+        _vertices[i].normal.z = unpackedVertices[i].normal[2];
+        _vertices[i].uv.x = unpackedVertices[i].uv[0];
+        _vertices[i].uv.y = unpackedVertices[i].uv[1];
+        _vertices[i].color.x = unpackedVertices[i].color[0];
+        _vertices[i].color.y = unpackedVertices[i].color[1];
+        _vertices[i].color.z = unpackedVertices[i].color[2];
+    }
+    
+
+    return true;
+
 }
