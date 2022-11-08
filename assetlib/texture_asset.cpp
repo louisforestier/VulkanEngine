@@ -36,7 +36,7 @@ assets::AssetFile assets::packTexture(assets::TextureInfo* info, void* pixelData
     return file;
 }
 
-assets::TextureFormat parse_format(const std::string& format) {
+assets::TextureFormat parse_image_format(const std::string& format) {
 
 	if (format == "RGBA8")
 	{
@@ -53,7 +53,7 @@ assets::TextureInfo assets::readTextureInfo(AssetFile* file)
 
     nlohmann::json textureMetadata = nlohmann::json::parse(file->json);
     std::string formatString = textureMetadata["format"];
-    info.textureFormat = parse_format(formatString);
+    info.textureFormat = parse_image_format(formatString);
 
     std::string compressionString = textureMetadata["compression"];
     info.compressionMode = parse_compression(compressionString);

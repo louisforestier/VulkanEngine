@@ -2,7 +2,7 @@
 #include <json.hpp>
 #include <lz4.h>
 
-assets::VertexFormat parse_format(const std::string &format)
+assets::VertexFormat parse_vertex_format(const std::string &format)
 {
     if (format == "PNCV_F32")
     {
@@ -19,7 +19,7 @@ assets::MeshInfo assets::readMeshInfo(AssetFile *file)
     MeshInfo info;
     nlohmann::json meshMetaData = nlohmann::json::parse(file->json);
     std::string formatString = meshMetaData["format"];
-    info.vertexFormat = parse_format(formatString);
+    info.vertexFormat = parse_vertex_format(formatString);
 
     std::string compressionString = meshMetaData["compression"];
     info.compressionMode = parse_compression(compressionString);
