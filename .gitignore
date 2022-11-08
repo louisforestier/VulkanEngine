@@ -36,3 +36,7 @@
 /build
 /bin
 */CMakeFiles
+
+# Generated assets
+*.tx
+*.mesh

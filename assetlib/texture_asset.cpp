@@ -8,8 +8,8 @@ assets::AssetFile assets::packTexture(assets::TextureInfo* info, void* pixelData
     textureMetadata["format"] ="RGBA8";
     textureMetadata["width"] = info->pixelsize[0];
     textureMetadata["height"] = info->pixelsize[1];
-    textureMetadata["buffer_size"] = info->textureSize;
-    textureMetadata["original_file"] = info->originalFile;
+    textureMetadata["bufferSize"] = info->textureSize;
+    textureMetadata["originalFile"] = info->originalFile;
 
     //core file header
 

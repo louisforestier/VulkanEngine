@@ -1,4 +1,5 @@
 #include <iostream>
+#define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 #include <tiny_obj_loader.h>
 #include <json.hpp>
@@ -35,70 +36,6 @@ bool convertImage(const fs::path& input, const fs::path& output)
 
     stbi_image_free(pixels);
     saveBinaryFile(output.string().c_str(),newImage);
-    return true;
-}
-
-
-bool convertMesh(const fs::path& input, const fs::path& output)
-{
-    //attrib will contain the vertex arrays of the file
-    tinyobj::attrib_t attrib;
-    //shapes contains the info for each separate objet in the file
-    std::vector<tinyobj::shape_t> shapes;
-    //materials contains the informations about the material of each shape, not used for now
-    std::vector<tinyobj::material_t> materials;
-
-    //error and warning output from the load function
-    std::string warn;
-    std::string err;
-
-    auto start  = std::chrono::high_resolution_clock::now();
-
-    //load the obj file
-    tinyobj::LoadObj(&attrib,&shapes,&materials,&warn,&err,input.string().c_str(),nullptr);
-
-    auto end = std::chrono::high_resolution_clock::now();
-
-    auto diff = end - start;
-    std::cout << "obj took " << std::chrono::duration_cast<std::chrono::milliseconds>(diff).count() << "ms" << std::endl;
-    //make sur to output the warnings to the console, in case there are issues with the file
-    if (!warn.empty())
-    {
-        std::cout << "WARN: " << warn << std::endl;
-    }
-    //if error break the mesh loading
-    //happens if file not found or malformed
-    if (!err.empty())
-    {
-        std::cerr << err << std::endl;
-        return false;
-    }
-
-    std::vector<Vertex> vertices;
-    std::vector<uint32_t> indices;
-
-    extractMeshFromObj(shapes,attrib,indices,vertices);
-
-
-    MeshInfo info;
-    info.vertexFormat = VertexFormat::PNCV_F32;
-    info.vertexBufferSize = vertices.size() * sizeof(Vertex);
-    info.indexBufferSize = indices.size() * sizeof(uint32_t);
-    info.indexSize = sizeof(uint32_t);
-    info.originalFile = input.string();
-    info.bounds = calculateBounds(vertices.data(), vertices.size());
-
-    auto start  = std::chrono::high_resolution_clock::now();
-
-    AssetFile newMesh = packMesh(&info,(char*)vertices.data(),(char*)indices.data());
-    
-    auto end  = std::chrono::high_resolution_clock::now();
-    
-    auto diff = end - start;
-
-    std::cout << "compression took " << std::chrono::duration_cast<std::chrono::milliseconds>(diff).count() << "ms" << std::endl;
-
-    saveBinaryFile(output.string().c_str(),newMesh);
     return true;
 }
 
@@ -162,6 +99,70 @@ bool extractMeshFromObj(std::vector<tinyobj::shape_t>& shapes, tinyobj::attrib_t
     return true;
 }
 
+
+
+bool convertMesh(const fs::path& input, const fs::path& output)
+{
+    //attrib will contain the vertex arrays of the file
+    tinyobj::attrib_t attrib;
+    //shapes contains the info for each separate objet in the file
+    std::vector<tinyobj::shape_t> shapes;
+    //materials contains the informations about the material of each shape, not used for now
+    std::vector<tinyobj::material_t> materials;
+
+    //error and warning output from the load function
+    std::string warn;
+    std::string err;
+
+    auto start  = std::chrono::high_resolution_clock::now();
+
+    //load the obj file
+    tinyobj::LoadObj(&attrib,&shapes,&materials,&warn,&err,input.string().c_str(),nullptr);
+
+    auto end = std::chrono::high_resolution_clock::now();
+
+    auto diff = end - start;
+    std::cout << "obj took " << std::chrono::duration_cast<std::chrono::milliseconds>(diff).count() << "ms" << std::endl;
+    //make sur to output the warnings to the console, in case there are issues with the file
+    if (!warn.empty())
+    {
+        std::cout << "WARN: " << warn << std::endl;
+    }
+    //if error break the mesh loading
+    //happens if file not found or malformed
+    if (!err.empty())
+    {
+        std::cerr << err << std::endl;
+        return false;
+    }
+
+    std::vector<Vertex> vertices;
+    std::vector<uint32_t> indices;
+
+    extractMeshFromObj(shapes,attrib,indices,vertices);
+
+
+    MeshInfo info;
+    info.vertexFormat = VertexFormat::PNCV_F32;
+    info.vertexBufferSize = vertices.size() * sizeof(Vertex);
+    info.indexBufferSize = indices.size() * sizeof(uint32_t);
+    info.indexSize = sizeof(uint32_t);
+    info.originalFile = input.string();
+    info.bounds = calculateBounds(vertices.data(), vertices.size());
+
+    start  = std::chrono::high_resolution_clock::now();
+
+    AssetFile newMesh = packMesh(&info,(char*)vertices.data(),(char*)indices.data());
+    
+    end  = std::chrono::high_resolution_clock::now();
+    
+    diff = end - start;
+
+    std::cout << "compression took " << std::chrono::duration_cast<std::chrono::milliseconds>(diff).count() << "ms" << std::endl;
+
+    saveBinaryFile(output.string().c_str(),newMesh);
+    return true;
+}
 
 int main(int argc, char const *argv[])
 {

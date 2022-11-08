@@ -160,12 +160,12 @@ void VulkanInstanceBuilder::createInstance()
     std::vector<VkExtensionProperties> vkExtensions(extensionCount);
     vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, vkExtensions.data());
 
-    std::cout << "Extensions disponibles : \n";
+    // std::cout << "Extensions disponibles : \n";
 
-    for (const auto &extension : vkExtensions)
-    {
-        std::cout << '\t' << extension.extensionName << '\n';
-    }
+    // for (const auto &extension : vkExtensions)
+    // {
+    //     std::cout << '\t' << extension.extensionName << '\n';
+    // }
 
 }
 

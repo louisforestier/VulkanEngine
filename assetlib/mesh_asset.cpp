@@ -47,10 +47,10 @@ void assets::unpackMesh(MeshInfo *info, const char *sourcebuffer, size_t sourceS
 {
     // decompressing into temporal vector
     // should try to do streaming decompression directly in the buffers
-    std::vector<float> decompressedBuffer;
+    std::vector<char> decompressedBuffer;
     decompressedBuffer.resize(info->vertexBufferSize);
 
-    LZ4_decompress_safe(sourcebuffer, decompressedBuffer.data(), static_cast<int>(sourceSize), static_cast<int>(decompressedBuffer.size));
+    LZ4_decompress_safe(sourcebuffer, decompressedBuffer.data(), static_cast<int>(sourceSize), static_cast<int>(decompressedBuffer.size()));
 
     // copy vertex buffer
     memcpy(vertexBuffer, decompressedBuffer.data(), info->vertexBufferSize);

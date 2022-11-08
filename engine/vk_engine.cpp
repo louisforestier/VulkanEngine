@@ -1458,7 +1458,7 @@ void VulkanEngine::load_images()
 {
 	Texture lostEmpire;
 
-	vkutil::load_image_from_file(*this,"../assets/lost_empire-RGBA.png",lostEmpire.image);
+	vkutil::load_image_from_asset(*this,"../assets/lost_empire-RGBA.tx",lostEmpire.image);
 
 	VkImageViewCreateInfo imageinfo = vkinit::imageview_create_info(VK_FORMAT_R8G8B8A8_SRGB, lostEmpire.image._image,VK_IMAGE_ASPECT_COLOR_BIT);
 	vkCreateImageView(_device,&imageinfo,nullptr,&lostEmpire.imageView);
