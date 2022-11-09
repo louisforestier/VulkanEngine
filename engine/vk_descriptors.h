@@ -2,6 +2,7 @@
 
 #include <vk_types.h>
 #include <vector>
+#include <unordered_map>
 
 class DescriptorAllocator
 {
@@ -49,4 +50,35 @@ private:
     PoolSizes _descriptorSizes;
     std::vector<VkDescriptorPool> _usedPools;
     std::vector<VkDescriptorPool> _freePools;   
+};
+
+
+class DescriptorLayoutCache
+{
+public:
+    void init(VkDevice device);
+    void cleanup();
+
+    VkDescriptorSetLayout createDescriptorLayout(VkDescriptorSetLayoutCreateInfo* info);
+
+    struct DescriptorLayoutInfo
+    {
+        std::vector<VkDescriptorSetLayoutBinding> _bindings;
+
+        bool operator==(const DescriptorLayoutInfo& other) const;
+
+        size_t hash() const;        
+    };
+
+private:
+    
+    struct DescriptorLayoutHash
+    {
+        std::size_t operator()(const DescriptorLayoutInfo& k) const{
+            return k.hash();
+        }
+    };
+
+    std::unordered_map<DescriptorLayoutInfo,VkDescriptorSetLayout,DescriptorLayoutHash> _layoutCache;
+    VkDevice _device;
 };

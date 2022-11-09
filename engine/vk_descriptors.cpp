@@ -1,4 +1,5 @@
 #include <vk_descriptors.h>
+#include <algorithm>
 
 void DescriptorAllocator::init(VkDevice device)
 {
@@ -124,4 +125,118 @@ void DescriptorAllocator::resetPools()
 
     //reset the current pool handle back to null
     _currentPool = VK_NULL_HANDLE;
+}
+
+void DescriptorLayoutCache::init(VkDevice device)
+{
+    _device = device;
+}
+
+void DescriptorLayoutCache::cleanup()
+{
+    //delete every descriptor layout held
+    for(auto &&pair : _layoutCache)
+    {
+        vkDestroyDescriptorSetLayout(_device, pair.second, nullptr);
+    }
+}
+
+VkDescriptorSetLayout DescriptorLayoutCache::createDescriptorLayout(VkDescriptorSetLayoutCreateInfo* info)
+{
+    DescriptorLayoutInfo layoutInfo;
+    layoutInfo._bindings.reserve(info->bindingCount);
+    bool isSorted = true;
+    int lastBinding = -1;
+
+    //copy from the direct info struct into our own
+    for (size_t i = 0; i < info->bindingCount; i++)
+    {
+        layoutInfo._bindings.push_back(info->pBindings[i]);
+
+        //check that the bindings are in strict increasing order
+        if (info->pBindings[i].binding > lastBinding)
+        {
+            lastBinding = info->pBindings[i].binding;
+        }
+        else
+        {
+            isSorted = false;
+        }                
+    }
+    //sort the bindings if they aren't
+    if (!isSorted)
+    {
+        std::sort(layoutInfo._bindings.begin(),layoutInfo._bindings.end(),[](VkDescriptorSetLayoutBinding& a, VkDescriptorSetLayoutBinding& b){
+            return a.binding < b.binding;
+        });
+    }
+
+    //try to grab from cache
+    auto it = _layoutCache.find(layoutInfo);
+    if (it != _layoutCache.end())   
+    {
+        return (*it).second;
+    }
+    else
+    {
+        //create a new one
+        VkDescriptorSetLayout layout;
+        vkCreateDescriptorSetLayout(_device,info,nullptr,&layout);
+
+        //add to cache
+        _layoutCache[layoutInfo] = layout;
+        return layout;
+    }        
+}
+
+bool DescriptorLayoutCache::DescriptorLayoutInfo::operator==(const DescriptorLayoutInfo& other) const
+{
+    if (other._bindings.size() != _bindings.size())
+    {
+        return false;
+    }
+    else
+    {
+        //compare if each of the bindings are the same. Bindings are sorted so they will match.
+        for (size_t i = 0; i < _bindings.size(); i++)
+        {
+            if (other._bindings[i].binding != _bindings[i].binding)
+            {
+                return false;
+            }
+            if (other._bindings[i].descriptorType != _bindings[i].descriptorType)
+            {
+                return false;
+            }
+            if (other._bindings[i].descriptorCount != _bindings[i].descriptorType)
+            {
+                return false;
+            }
+            if (other._bindings[i].stageFlags != _bindings[i].stageFlags)
+            {
+                return false;
+            }
+        }
+        return true;        
+    }        
+}
+
+size_t DescriptorLayoutCache::DescriptorLayoutInfo::hash() const
+{
+    using std::size_t;
+    using std::hash;
+
+    size_t result = hash<size_t>()(_bindings.size());
+    for(const VkDescriptorSetLayoutBinding& b : _bindings)
+    {
+        //pack the binding data into a single int64.
+        //Not fully correct but will do the job
+        size_t binding_hash = b.binding | b.descriptorType << 8 | b.descriptorCount << 16 | b.stageFlags << 24;   
+
+        //shuffle the packed binding data and xor it with the main hash
+        //should also test hash(a)<<1 + hash(a) + hash(b) for improved hashing function but could overflow because of the addition
+
+        result ^= hash<size_t>()(binding_hash);
+    }
+    return result;
 }
