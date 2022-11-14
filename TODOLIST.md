@@ -1,6 +1,8 @@
 why is it so slow..? -> because bootstrap select llvmpipe instead of actual gpu 
 -> solution : remove bootstrap
 
+add vk_check to vk descriptor methods
+
 create generated assets in a specific folder
 
 refactor everything in snake or camel case

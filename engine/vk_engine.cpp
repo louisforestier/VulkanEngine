@@ -488,28 +488,12 @@ bool VulkanEngine::load_shader_module(const char* filePath, VkShaderModule* outS
 
 void VulkanEngine::init_descriptors()
 {
+	_descriptorAllocator.init(_device);
+	_descriptorLayoutCache.init(_device);
+
 	const size_t _sceneParamBufferSize = FRAME_OVERLAP * pad_uniform_buffer_size(sizeof(GPUSceneData));
 
 	_sceneParametersBuffer = create_buffer(_sceneParamBufferSize,VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,VMA_MEMORY_USAGE_CPU_TO_GPU);
-
-	//create a descriptor pool that will hold 10 uniform buffers
-	std::vector<VkDescriptorPoolSize> sizes = {
-		{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,10},
-		{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,10},		
-		{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,10},
-		//add combined image sampler descriptor types to the pool
-		{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,10}		
-	};
-
-	VkDescriptorPoolCreateInfo poolInfo{};
-	poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-	poolInfo.pNext = nullptr;
-	poolInfo.flags = 0;
-	poolInfo.maxSets = 10;
-	poolInfo.poolSizeCount = (uint32_t) sizes.size();
-	poolInfo.pPoolSizes = sizes.data();
-
-	VK_CHECK(vkCreateDescriptorPool(_device,&poolInfo,nullptr,&_descriptorPool));
 
 	//information about the bindings
 	VkDescriptorSetLayoutBinding cameraBind = vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,VK_SHADER_STAGE_VERTEX_BIT,0);
@@ -520,13 +504,12 @@ void VulkanEngine::init_descriptors()
 
 	VkDescriptorSetLayoutCreateInfo setinfo{};
 	setinfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-	setinfo.pNext = nullptr;
-	
+	setinfo.pNext = nullptr;	
 	setinfo.bindingCount = 2;
 	setinfo.flags = 0;
 	setinfo.pBindings = bindings;
 
-	VK_CHECK(vkCreateDescriptorSetLayout(_device,&setinfo,nullptr,&_globalSetLayout));
+	_globalSetLayout = _descriptorLayoutCache.createDescriptorLayout(&setinfo);
 	
 	VkDescriptorSetLayoutCreateInfo set2info{};
 	set2info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -535,7 +518,7 @@ void VulkanEngine::init_descriptors()
 	set2info.flags = 0;
 	set2info.pBindings = &objectBind;
 
-	VK_CHECK(vkCreateDescriptorSetLayout(_device,&set2info,nullptr,&_objectSetLayout));
+	_objectSetLayout = _descriptorLayoutCache.createDescriptorLayout(&set2info);
 
 	VkDescriptorSetLayoutBinding textureBind = vkinit:: descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,VK_SHADER_STAGE_FRAGMENT_BIT,0);
 
@@ -546,8 +529,7 @@ void VulkanEngine::init_descriptors()
 	set3info.pBindings = &textureBind;
 	set3info.flags = 0;
 
-	vkCreateDescriptorSetLayout(_device,&set3info,nullptr,&_singleTextureSetLayout);
-
+	_singleTextureSetLayout = _descriptorLayoutCache.createDescriptorLayout(&set3info);
 
 	for (int i = 0; i < FRAME_OVERLAP; i++)
 	{
@@ -557,24 +539,10 @@ void VulkanEngine::init_descriptors()
 		_frames[i]._cameraBuffer = create_buffer(sizeof(GPUCameraData),VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,VMA_MEMORY_USAGE_CPU_TO_GPU);
 	
 		//allocate one descriptor set for each frame
-		VkDescriptorSetAllocateInfo allocInfo{};
-		allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-		allocInfo.pNext = nullptr;
-		allocInfo.descriptorPool = _descriptorPool;
-		allocInfo.descriptorSetCount = 1;
-		allocInfo.pSetLayouts = &_globalSetLayout;
-
-		vkAllocateDescriptorSets(_device,&allocInfo,&_frames[i]._globalDescriptor);
+		_descriptorAllocator.allocate(&_frames[i]._globalDescriptor,_globalSetLayout);
 
 		//allocate the descriptor set that will point to object buffer
-		VkDescriptorSetAllocateInfo objectSetAlloc{};
-		objectSetAlloc.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-		objectSetAlloc.pNext = nullptr;
-		objectSetAlloc.descriptorPool = _descriptorPool;
-		objectSetAlloc.descriptorSetCount = 1;
-		objectSetAlloc.pSetLayouts = &_objectSetLayout;
-
-		vkAllocateDescriptorSets(_device,&objectSetAlloc,&_frames[i].__objectDescriptor);
+		_descriptorAllocator.allocate(&_frames[i]._objectDescriptor,_objectSetLayout);
 
 		//information about the buffer we want to point at in the descriptor
 		VkDescriptorBufferInfo cameraInfo{};
@@ -585,6 +553,7 @@ void VulkanEngine::init_descriptors()
 		//of the size of a camera data struct
 		cameraInfo.range = sizeof(GPUCameraData);
 		
+
 		VkDescriptorBufferInfo sceneInfo{};
 		sceneInfo.buffer = _sceneParametersBuffer._buffer;
 		//for non dynamic buffer 
@@ -592,20 +561,19 @@ void VulkanEngine::init_descriptors()
 		sceneInfo.offset = 0;
 		sceneInfo.range = sizeof(GPUSceneData);
 
+		vkutil::DescriptorBuilder::begin(&_descriptorLayoutCache,&_descriptorAllocator)
+		.bindBuffer(0,&cameraInfo,VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,VK_SHADER_STAGE_VERTEX_BIT)
+		.bindBuffer(1,&sceneInfo,VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT)
+		.build(_frames[i]._globalDescriptor);
+
 		VkDescriptorBufferInfo objectBufferInfo{};
 		objectBufferInfo.buffer = _frames[i]._objectBuffer._buffer;
 		objectBufferInfo.offset = 0;
 		objectBufferInfo.range = sizeof(GPUObjectData) * MAX_OBJECTS;
 
-		VkWriteDescriptorSet cameraWrite = vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,_frames[i]._globalDescriptor,&cameraInfo,0);
-
-		VkWriteDescriptorSet sceneWrite = vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,_frames[i]._globalDescriptor,&sceneInfo,1);
-		
-		VkWriteDescriptorSet objectWrite = vkinit::write_descriptor_buffer(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,_frames[i].__objectDescriptor,&objectBufferInfo,0);
-		
-		VkWriteDescriptorSet setWrites[] = {cameraWrite,sceneWrite, objectWrite};
-
-		vkUpdateDescriptorSets(_device,3,setWrites,0,nullptr);
+		vkutil::DescriptorBuilder::begin(&_descriptorLayoutCache,&_descriptorAllocator)
+		.bindBuffer(0,&objectBufferInfo,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,VK_SHADER_STAGE_VERTEX_BIT)
+		.build(_frames[i]._objectDescriptor);
 	}
 
 
@@ -996,14 +964,7 @@ void VulkanEngine::init_scene()
 	Material* texturedMat = get_material("texturedmesh");
 
 	//allocate the descriptor set for single-texture to use on the material
-	VkDescriptorSetAllocateInfo allocInfo{};
-	allocInfo.pNext = nullptr;
-	allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-	allocInfo.descriptorPool = _descriptorPool;
-	allocInfo.descriptorSetCount = 1;
-	allocInfo.pSetLayouts = &_singleTextureSetLayout;
-
-	vkAllocateDescriptorSets(_device,&allocInfo,&texturedMat->textureSet);
+	_descriptorAllocator.allocate(&texturedMat->textureSet,_singleTextureSetLayout);
 
 	//create a sampler for the texture
 	//use filter nearest to make texture appear blocky, which is what we want
@@ -1022,9 +983,9 @@ void VulkanEngine::init_scene()
 	imageBufferInfo.imageView = _loadedTextures["empire_diffuse"].imageView;
 	imageBufferInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
-	VkWriteDescriptorSet texture1 = vkinit::write_descriptor_image(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,texturedMat->textureSet,&imageBufferInfo,0);
-
-	vkUpdateDescriptorSets(_device,1,&texture1,0,nullptr);
+	vkutil::DescriptorBuilder::begin(&_descriptorLayoutCache,&_descriptorAllocator)
+	.bindImage(0,&imageBufferInfo,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,VK_SHADER_STAGE_FRAGMENT_BIT)
+	.build(texturedMat->textureSet);
 }
 
 #pragma endregion init
@@ -1361,7 +1322,7 @@ void VulkanEngine::draw_objects(VkCommandBuffer cmd, RenderObject* first, int co
 			vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,object.material->pipelineLayout,0,1,&get_current_frame()._globalDescriptor,1,&uniform_offset);
 
 			//object data descriptor
-			vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,object.material->pipelineLayout,1,1,&get_current_frame().__objectDescriptor,0,nullptr);
+			vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,object.material->pipelineLayout,1,1,&get_current_frame()._objectDescriptor,0,nullptr);
 
 			if (object.material->textureSet != VK_NULL_HANDLE)
 			{

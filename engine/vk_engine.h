@@ -13,6 +13,7 @@
 #include <vk_mesh.h>
 #include <vk_textures.h>
 #include <vk_types.h>
+#include <vk_descriptors.h>
 
 #include <glm/glm.hpp>
 
@@ -69,7 +70,8 @@ struct FrameData
 	VkDescriptorSet _globalDescriptor;
 
 	AllocatedBuffer _objectBuffer;
-	VkDescriptorSet __objectDescriptor;
+	VkDescriptorSet _objectDescriptor;
+	
 };
 
 struct GPUObjectData
@@ -167,6 +169,9 @@ public:
 
 	VkFormat _depthFormat;
 
+	vkutil::DescriptorAllocator _descriptorAllocator;
+	vkutil::DescriptorLayoutCache _descriptorLayoutCache;
+
 	VkDescriptorSetLayout _globalSetLayout;
 	VkDescriptorPool _descriptorPool;
 
@@ -188,6 +193,8 @@ public:
 	UploadContext _uploadContext;
 
 	std::unordered_map<std::string,Texture> _loadedTextures;
+
+
 
 	glm::vec3 _camPos;
 	bool _bQuit;
