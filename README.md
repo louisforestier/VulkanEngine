@@ -11,7 +11,7 @@ When it will be done, I'm planning to expand on it to try my hand at other subje
 This is mostly a learning project.
 
 The roadmap for GPU Driven Rendering:
-- CVARS
+- CVARS DONE
 - logger
 - imgui widgets
 - profiler (tracy)
