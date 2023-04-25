@@ -1,6 +1,12 @@
 #include <cvars.h>
 #include <string>
 #include <unordered_map>
+#include <vector>
+#include <algorithm>
+
+#include "imgui.h"
+#include "imgui_stdlib.h"
+#include "imgui_internal.h"
 
 enum class CVarType : char
 {
@@ -119,11 +125,15 @@ public:
     const std::string* GetStringCVar(StringUtils::StringHash hash) override final;
     void SetStringCVar(StringUtils::StringHash hash, const std::string& value) override final;
 
+    void DrawImguiEditor() override final;
+    void EditParameter(CVarParameter* p, float textWidth);
+
     static CVarSystemImpl* Get();
 
 private:
     CVarParameter* InitCVar(const char* name, const char* description);
     std::unordered_map<uint32_t, CVarParameter> _savedCVars;
+	std::vector<CVarParameter*> _cachedEditParameters;
 
     //templated get-set cvar versions for syntax sugar
     template<typename T>
@@ -278,6 +288,11 @@ T GetCVarCurrentByIndex(int32_t index)
     return CVarSystemImpl::Get()->GetCVarArray<T>()->GetCurrent(index);
 }
 
+template<typename T>
+T* PtrGetCVarCurrentByIndex(int32_t index) {
+	return CVarSystemImpl::Get()->GetCVarArray<T>()->GetCurrentPtr(index);
+}
+
 //set the cvar data purely by type and array index
 template<typename T>
 void SetCVarCurrentByIndex(const T& data, int32_t index)
@@ -298,10 +313,23 @@ int32_t AutoCVar_Int::Get()
     return GetCVarCurrentByIndex<CVarType>(_index);
 }
 
+int32_t* AutoCVar_Int::GetPtr()
+{
+	return PtrGetCVarCurrentByIndex<CVarType>(_index);
+}
+
 void AutoCVar_Int::Set(int32_t val)
 {
     SetCVarCurrentByIndex<CVarType>(val, _index);
 }
+
+void AutoCVar_Int::Toggle()
+{
+	bool enabled = Get() != 0;
+
+	Set(enabled ? 0 : 1);
+}
+
 
 //cvar double constructor
 AutoCVar_Float::AutoCVar_Float(const char* name, const char* description, double defaultValue, CVarFlags flags /** = None*/)
@@ -321,6 +349,22 @@ void AutoCVar_Float::Set(double val)
     SetCVarCurrentByIndex<CVarType>(val, _index);
 }
 
+double* AutoCVar_Float::GetPtr()
+{
+	return PtrGetCVarCurrentByIndex<CVarType>(_index);
+}
+
+float AutoCVar_Float::GetFloat()
+{
+	return static_cast<float>(Get());
+}
+
+float* AutoCVar_Float::GetFloatPtr()
+{
+	float* result = reinterpret_cast<float*>(GetPtr());
+	return result;
+}
+
 //cvar string constructor
 AutoCVar_String::AutoCVar_String(const char* name, const char* description, const std::string& defaultValue, CVarFlags flags /** = None*/)
 {
@@ -337,4 +381,207 @@ const std::string& AutoCVar_String::Get()
 void AutoCVar_String::Set(const std::string& val)
 {
     SetCVarCurrentByIndex<CVarType>(val, _index);
+}
+
+void CVarSystemImpl::DrawImguiEditor()
+{
+    static std::string searchText = "";
+
+    ImGui::InputText("Filter",&searchText);
+    static bool showAdvanced = false;
+    ImGui::Checkbox("Advanced",&showAdvanced);
+    ImGui::Separator();
+    _cachedEditParameters.clear();
+    auto addToEditList = [&](CVarParameter* parameter)
+    {
+        bool hidden = ((uint32_t)parameter->_flags & (uint32_t)CVarFlags::NoEdit);
+        bool isAdvanced = ((uint32_t)parameter->_flags & (uint32_t)CVarFlags::Advanced);
+        
+        if (!hidden)
+        {
+            if (!(!showAdvanced && isAdvanced) && parameter->_name.find(searchText) != std::string::npos) 
+            {
+                _cachedEditParameters.push_back(parameter);
+            }            
+        }        
+    };
+
+    for (size_t i = 0; i < GetCVarArray<int32_t>()->_lastCVar; i++)
+    {
+        addToEditList(GetCVarArray<int32_t>()->_cvars[i]._parameter);
+    }
+        for (size_t i = 0; i < GetCVarArray<double>()->_lastCVar; i++)
+    {
+        addToEditList(GetCVarArray<double>()->_cvars[i]._parameter);
+    }
+    for (size_t i = 0; i < GetCVarArray<std::string>()->_lastCVar; i++)
+    {
+        addToEditList(GetCVarArray<std::string>()->_cvars[i]._parameter);
+    }
+
+    if (_cachedEditParameters.size() > 10)
+    {
+        std::unordered_map<std::string, std::vector<CVarParameter*>> categorizedParams;
+        
+        //insert all the edit parameters into the hashmap by category
+        for (auto &&p : _cachedEditParameters)
+        {
+            int dotPos = p->_name.find('.');
+            std::string category = "";
+            
+            if(dotPos != std::string::npos)
+            {
+                category = p->_name.substr(0, dotPos);
+            }        
+            auto it = categorizedParams.find(category);
+            if (it == categorizedParams.end())  
+            {
+                categorizedParams[category] = std::vector<CVarParameter*>();
+                it = categorizedParams.find(category);
+            }
+            it->second.push_back(p);        
+        }
+
+        for(auto& [category, parameters] : categorizedParams)
+        {
+            std::sort(parameters.begin(), parameters.end(), [](CVarParameter* A, CVarParameter* B)
+            {
+                return A->_name < B->_name;
+            });
+            
+            if (ImGui::BeginMenu(category.c_str()))
+            {
+                float maxTextWidth = 0;
+
+                for (auto &&p : parameters)
+                {
+                    maxTextWidth = std::max(maxTextWidth, ImGui::CalcTextSize(p->_name.c_str()).x);
+                }
+                
+                for (auto &&p : parameters)
+                {
+                    EditParameter(p, maxTextWidth);
+                }
+                ImGui::EndMenu();
+            }            
+        }
+    }
+    else
+    {
+        std::sort(_cachedEditParameters.begin(), _cachedEditParameters.end(), [](CVarParameter* A, CVarParameter* B)
+        {
+            return A->_name < B->_name;
+        });
+
+        float maxTextWidth = 0;
+        for (auto &&p : _cachedEditParameters)
+        {
+            maxTextWidth = std::max(maxTextWidth, ImGui::CalcTextSize(p->_name.c_str()).x);
+        }        
+
+        for (auto &&p : _cachedEditParameters)
+        {
+            EditParameter(p, maxTextWidth);
+        }
+    }
+}
+
+void Label(const char* label, float textWidth)
+{
+    constexpr float Slack = 50;
+    constexpr float EditorWidth = 100;
+
+    ImGuiWindow* window = ImGui::GetCurrentWindow();
+    const ImVec2 lineStart = ImGui::GetCursorScreenPos();
+    const ImGuiStyle& style = ImGui::GetStyle();
+    float fullWidth = textWidth + Slack;
+    ImVec2 textSize = ImGui::CalcTextSize(label);
+    ImVec2 startPos = ImGui::GetCursorScreenPos();
+    ImGui::Text(label);
+    ImVec2 finalPos = {startPos.x + fullWidth, startPos.y};
+    ImGui::SameLine();
+    ImGui::SetCursorScreenPos(finalPos);
+    ImGui::SetNextItemWidth(EditorWidth);
+}
+
+void CVarSystemImpl::EditParameter(CVarParameter* p, float textWidth)
+{
+    const bool readonlyFlag = ((uint32_t)p->_flags & (uint32_t)CVarFlags::EditReadOnly);
+    const bool checkboxFlag = ((uint32_t)p->_flags & (uint32_t)CVarFlags::EditCheckBox);
+    const bool dragFlag = ((uint32_t)p->_flags & (uint32_t)CVarFlags::EditFloatDrag);
+
+    switch (p->_type)
+    {
+    case CVarType::INT:
+        if (readonlyFlag)
+        {
+            std::string displayFormat = p->_name + "= %i";
+            ImGui::Text(displayFormat.c_str(), GetCVarArray<int32_t>()->GetCurrent(p->_arrayIndex));            
+        }
+        else
+        {
+            if (checkboxFlag)
+            {
+                bool bCheckbox = GetCVarArray<int32_t>()->GetCurrent(p->_arrayIndex) != 0;
+                Label(p->_name.c_str(), textWidth);
+                ImGui::PushID(p->_name.c_str());
+                if (ImGui::Checkbox("", &bCheckbox))
+                {
+                    GetCVarArray<int32_t>()->SetCurrent(bCheckbox ? 1 : 0, p->_arrayIndex);
+                }
+                ImGui::PopID();
+            }
+            else
+            {
+                Label(p->_name.c_str(), textWidth);
+                ImGui::PushID(p->_name.c_str());
+                ImGui::InputInt("", GetCVarArray<int32_t>()->GetCurrentPtr(p->_arrayIndex));
+                ImGui::PopID();
+            }            
+        }        
+        break;
+    case CVarType::FLOAT:
+        if (readonlyFlag)
+        {
+            std::string displayFormat = p->_name + "= %f";
+            ImGui::Text(displayFormat.c_str(), GetCVarArray<double>()->GetCurrent(p->_arrayIndex));
+        }
+        else
+        {
+            Label(p->_name.c_str(), textWidth);
+            ImGui::PushID(p->_name.c_str());
+            if (dragFlag)
+            {
+                ImGui::InputDouble("", GetCVarArray<double>()->GetCurrentPtr(p->_arrayIndex),0,0,"%.3f");                
+            }
+            else
+            {
+                ImGui::InputDouble("", GetCVarArray<double>()->GetCurrentPtr(p->_arrayIndex),0,0,"%.3f");                
+            }
+            ImGui::PopID();
+        }        
+        break;
+
+    case CVarType::STRING:
+        if (readonlyFlag)
+        {
+            std::string displayFormat = p->_name + "= %s";
+            ImGui::PushID(p->_name.c_str());
+            ImGui::Text(displayFormat.c_str(), GetCVarArray<std::string>()->GetCurrentPtr(p->_arrayIndex));
+            ImGui::PopID();
+        }
+        else
+        {
+            Label(p->_name.c_str(), textWidth);
+            ImGui::InputText("", GetCVarArray<std::string>()->GetCurrentPtr(p->_arrayIndex));
+            ImGui::PopID();
+        }
+        break;
+    default:
+        break;
+    }
+    if (ImGui::IsItemHovered())
+    {
+        ImGui::SetTooltip(p->_description.c_str());
+    }    
 }

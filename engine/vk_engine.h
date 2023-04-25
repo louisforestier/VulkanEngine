@@ -79,6 +79,16 @@ struct GPUObjectData
 	glm::mat4 modelMatrix;
 };
 
+struct EngineStats
+{
+	float _frametime;
+	int _objects;
+	int _drawcalls;
+	int _draws;
+	int _triangles;
+};
+
+
 struct UploadContext
 {
 	VkFence _uploadFence;
@@ -261,4 +271,6 @@ private:
 	void handle_key_down(const SDL_KeyboardEvent& event);
 	
 	void handle_key_up(const SDL_KeyboardEvent& event);
+
+	EngineStats _stats;
 };

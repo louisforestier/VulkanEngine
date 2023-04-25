@@ -18,6 +18,7 @@
 
 #include <glm/gtx/transform.hpp>
 
+#include "cvars.h"
 #include "vk_pipeline.h"
 
 #define VMA_IMPLEMENTATION
@@ -28,6 +29,9 @@ constexpr bool enableValidationLayers = false;
 #else
 constexpr bool enableValidationLayers = true;
 #endif
+
+AutoCVar_Int CVAR_OutputIndirectToFile("culling.outputIndirectBufferToFile", "output the indirect data to a file. Autoresets", 0, CVarFlags::EditCheckBox);
+
 
 #pragma region init
 
@@ -173,6 +177,7 @@ void VulkanEngine::init_imgui()
 
 	//this initializes the core structures of imgui
 	ImGui::CreateContext();
+	ImGui::GetIO().IniFilename = NULL;
 
 	//this initializes imgui for sdl
 	ImGui_ImplSDL2_InitForVulkan(_window);
@@ -1109,9 +1114,22 @@ void VulkanEngine::run()
 {
 	_bQuit = false;
 	float speed = 0.05f;
+
+	// Using time point and system_clock 
+	std::chrono::time_point<std::chrono::system_clock> start, end;
+	
+	start = std::chrono::system_clock::now();
+	end = std::chrono::system_clock::now();
+
 	// main loop
 	while (!_bQuit)
 	{
+		end = std::chrono::system_clock::now();
+		std::chrono::duration<float> elapsed_seconds = end - start;
+		_stats._frametime = elapsed_seconds.count() * 1000.f;
+
+		start = std::chrono::system_clock::now();
+
 		glm::vec3 velocity(0.f);
 		// Handle events on queue
 		SDL_Event e;
@@ -1131,7 +1149,40 @@ void VulkanEngine::run()
 		ImGui::NewFrame();
 		
 		//imgui commands
-		ImGui::ShowMetricsWindow();
+		if (ImGui::BeginMainMenuBar())
+		{
+			if (ImGui::BeginMenu("Debug"))
+			{
+				if (ImGui::BeginMenu("CVAR"))
+				{
+					CVarSystem::Get()->DrawImguiEditor();
+					ImGui::EndMenu();
+				}
+				ImGui::EndMenu();				
+			}
+			ImGui::EndMainMenuBar();			
+		}
+
+		//todo set et update les stats.
+		ImGui::Begin("engine");
+		ImGui::Text("FPS: %d", int(1000.f / _stats._frametime));
+		ImGui::Text("Frametimes: %f ms", _stats._frametime);
+		ImGui::Text("Objects: %d", _stats._objects);
+		ImGui::Text("Drawcalls: %d", _stats._draws);
+		ImGui::Text("Batches: %d", _stats._draws);
+		ImGui::Text("Triangles: %d", _stats._triangles);
+
+		CVAR_OutputIndirectToFile.Set(false);
+		if (ImGui::Button("Output Indirect"))
+		{
+			CVAR_OutputIndirectToFile.Set(true);
+		}
+
+		ImGui::Separator();
+		ImGui::End();
+		
+		
+		
 
 		draw();
 	}
@@ -1302,11 +1353,17 @@ void VulkanEngine::draw_objects(VkCommandBuffer cmd, RenderObject* first, int co
 	}
 	vmaUnmapMemory(_allocator,get_current_frame()._objectBuffer._allocation);
 	
+	_stats._drawcalls = 0;
+	_stats._draws = 0;
+	_stats._objects = 0;
+	_stats._triangles = 0;
 
 
 	Mesh* lastMesh = nullptr;
 	Material* lastMaterial = nullptr;
 	
+	_stats._objects = count;
+
 	for (int i = 0; i < count; i++)
 	{
 		RenderObject& object = first[i];
@@ -1349,6 +1406,9 @@ void VulkanEngine::draw_objects(VkCommandBuffer cmd, RenderObject* first, int co
 
 		//finally the drawcall
 		vkCmdDraw(cmd,object.mesh->_vertices.size(),1,0,i);
+		_stats._draws++;
+		_stats._triangles += static_cast<int32_t>(object.mesh->_vertices.size() / 3);
+		_stats._drawcalls++;
 	}
 }
 
