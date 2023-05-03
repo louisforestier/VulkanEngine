@@ -12,9 +12,9 @@ This is mostly a learning project.
 
 The roadmap for GPU Driven Rendering:
 - CVARS DONE
-- logger
-- imgui widgets
-- profiler (tracy)
+- logger DONE
+- imgui widgets IN PROGRESS
+- profiler + tracy
 - camera
 - indexed drawcall
 - improved buffer handling
@@ -22,11 +22,11 @@ The roadmap for GPU Driven Rendering:
 - better asset system
 - scene (scenerender)
 - shaders
-- draw indirect
-- compute shaders
 - material system
-- rendering
+- compute shaders
 - compute base culling
+- draw indirect
+- rendering
 
 After: 
 
@@ -45,3 +45,6 @@ packing both the structs for all frames into the same uniform buffer, and then u
 should use VMA_MEMORY_USAGE_AUTO and set flags to a combination of one or more VmaAllocationCreateFlagBits.
 - separate renderer from logic (movement, etc.)
 - abstract renderer to be able to use other APIs
+- deferred
+- forward+ / clustered 
+- ray tracing
