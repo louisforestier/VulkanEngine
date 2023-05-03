@@ -70,6 +70,6 @@ struct AutoCVar_String : AutoCVar<std::string>
 {
     AutoCVar_String(const char* name, const char* description, const std::string& defaultValue, CVarFlags flags = CVarFlags::None);
 
-    const std::string& Get();
+    const std::string Get();
     void Set(const std::string& val);
 };

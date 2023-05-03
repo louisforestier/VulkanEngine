@@ -373,7 +373,7 @@ AutoCVar_String::AutoCVar_String(const char* name, const char* description, cons
     _index = par->_arrayIndex;
 }
 
-const std::string& AutoCVar_String::Get()
+const std::string AutoCVar_String::Get()
 {
     return GetCVarCurrentByIndex<CVarType>(_index);
 }
@@ -497,7 +497,7 @@ void Label(const char* label, float textWidth)
     float fullWidth = textWidth + Slack;
     ImVec2 textSize = ImGui::CalcTextSize(label);
     ImVec2 startPos = ImGui::GetCursorScreenPos();
-    ImGui::Text(label);
+    ImGui::Text("%s",label);
     ImVec2 finalPos = {startPos.x + fullWidth, startPos.y};
     ImGui::SameLine();
     ImGui::SetCursorScreenPos(finalPos);
@@ -582,6 +582,6 @@ void CVarSystemImpl::EditParameter(CVarParameter* p, float textWidth)
     }
     if (ImGui::IsItemHovered())
     {
-        ImGui::SetTooltip(p->_description.c_str());
+        ImGui::SetTooltip("%s",p->_description.c_str());
     }    
 }
