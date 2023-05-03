@@ -19,6 +19,7 @@
 #include <glm/gtx/transform.hpp>
 
 #include "cvars.h"
+#include "logger.h"
 #include "vk_pipeline.h"
 
 #define VMA_IMPLEMENTATION
@@ -37,6 +38,7 @@ AutoCVar_Int CVAR_OutputIndirectToFile("culling.outputIndirectBufferToFile", "ou
 
 void VulkanEngine::init()
 {
+	Logger::Get().set_time();
 	// We initialize SDL and create a window with it.
 	SDL_Init(SDL_INIT_VIDEO);
 

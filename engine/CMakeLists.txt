@@ -12,7 +12,7 @@ set_property(TARGET engine PROPERTY VS_DEBUGGER_WORKING_DIRECTORY "$<TARGET_FILE
 
 target_include_directories(engine PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 
-target_link_libraries(engine vma glm tinyobjloader imgui stb_image)
+target_link_libraries(engine vma glm tinyobjloader imgui stb_image fmt)
 
 target_link_libraries(engine Vulkan::Vulkan sdl2 assetlib)
 
