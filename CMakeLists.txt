@@ -27,9 +27,13 @@ add_subdirectory(assetlib)
 add_subdirectory(asset-baker)
 add_subdirectory(engine)
 
+find_program(GLSL_COMPILER glslangValidator HINTS /usr/bin /usr/local/bin $ENV{VULKAN_SDK}/Bin/ $ENV{VULKAN_SDK}/Bin32/)
+set(GLSL_COMPILER_OPTION "-V")
+if(NOT GLSL_COMPILER)
+  find_program(GLSL_COMPILER glslc HINTS /usr/bin /usr/local/bin $ENV{VULKAN_SDK}/Bin/ $ENV{VULKAN_SDK}/Bin32/)
+  set(GLSL_COMPILER_OPTION "")
+endif()
 
-
-find_program(GLSLC glslc HINTS /usr/bin /usr/local/bin $ENV{VULKAN_SDK}/Bin/ $ENV{VULKAN_SDK}/Bin32/)
 
 ## find all the shader files under the shaders folder
 file(GLOB_RECURSE GLSL_SOURCE_FILES
@@ -47,7 +51,7 @@ foreach(GLSL ${GLSL_SOURCE_FILES})
   ##execute glslang command to compile that specific shader
   add_custom_command(
     OUTPUT ${SPIRV}
-    COMMAND ${GLSLC} ${GLSL} -o ${SPIRV}
+    COMMAND ${GLSL_COMPILER} ${GLSL_COMPILER_OPTION} ${GLSL} -o ${SPIRV}
     DEPENDS ${GLSL})
   list(APPEND SPIRV_BINARY_FILES ${SPIRV})
 endforeach(GLSL)

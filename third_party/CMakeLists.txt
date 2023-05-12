@@ -30,16 +30,18 @@ target_sources(tinyobjloader PRIVATE
 
 target_include_directories(tinyobjloader PUBLIC tinyobjloader)
 
-
-add_library(sdl2 INTERFACE)
-set(sdl2_DIR "SDL_PATH" CACHE PATH "Path to SDL2")
-
-target_include_directories(sdl2 INTERFACE ${sdl2_DIR}/include ${sdl2_image_DIR}/include)
-target_link_directories(sdl2 INTERFACE ${sdl2_DIR}/lib/x64 ${sdl2_image_DIR}/lib/x64)
-
-target_link_libraries(sdl2 INTERFACE SDL2 SDL2main)
-
+add_subdirectory(SDL)
 add_library(imgui STATIC)
+
+# SDL2::SDL2main may or may not be available. It is e.g. required by Windows GUI applications
+if(TARGET SDL2::SDL2main)
+    # It has an implicit dependency on SDL2 functions, so it MUST be added before SDL2::SDL2 (or SDL2::SDL2-static)
+    target_link_libraries(imgui PRIVATE SDL2::SDL2main)
+endif()
+
+# Link to the actual SDL2 library. SDL2::SDL2 is the shared SDL library, SDL2::SDL2-static is the static SDL libarary.
+target_link_libraries(imgui PRIVATE SDL2::SDL2)
+
 
 target_include_directories(imgui PUBLIC imgui)
 
@@ -57,7 +59,7 @@ target_sources(imgui PRIVATE
     imgui/imgui_impl_sdl.cpp
     )
 
-target_link_libraries(imgui PUBLIC Vulkan::Vulkan sdl2)
+target_link_libraries(imgui PUBLIC Vulkan::Vulkan)
 
 target_include_directories(stb_image INTERFACE stb_image)
 
