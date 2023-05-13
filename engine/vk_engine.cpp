@@ -18,6 +18,8 @@
 
 #include <glm/gtx/transform.hpp>
 
+#include <tracy/Tracy.hpp>
+
 #include "cvars.h"
 #include "logger.h"
 #include "vk_pipeline.h"

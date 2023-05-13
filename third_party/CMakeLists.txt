@@ -31,11 +31,12 @@ target_sources(tinyobjloader PRIVATE
 target_include_directories(tinyobjloader PUBLIC tinyobjloader)
 
 add_subdirectory(SDL)
+
 add_library(imgui STATIC)
 
 # SDL2::SDL2main may or may not be available. It is e.g. required by Windows GUI applications
 if(TARGET SDL2::SDL2main)
-    # It has an implicit dependency on SDL2 functions, so it MUST be added before SDL2::SDL2 (or SDL2::SDL2-static)
+# It has an implicit dependency on SDL2 functions, so it MUST be added before SDL2::SDL2 (or SDL2::SDL2-static)
     target_link_libraries(imgui PRIVATE SDL2::SDL2main)
 endif()
 
@@ -64,3 +65,6 @@ target_link_libraries(imgui PUBLIC Vulkan::Vulkan)
 target_include_directories(stb_image INTERFACE stb_image)
 
 add_subdirectory(fmt)
+
+option( TRACY_ENABLE "" ON)
+add_subdirectory(tracy)

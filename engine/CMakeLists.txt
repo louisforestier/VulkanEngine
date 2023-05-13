@@ -12,7 +12,7 @@ set_property(TARGET engine PROPERTY VS_DEBUGGER_WORKING_DIRECTORY "$<TARGET_FILE
 
 target_include_directories(engine PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 
-target_link_libraries(engine vma glm tinyobjloader imgui stb_image fmt SDL2::SDL2)
+target_link_libraries(engine vma glm tinyobjloader imgui stb_image fmt SDL2::SDL2 Tracy::TracyClient)
 # SDL2::SDL2main may or may not be available. It is e.g. required by Windows GUI applications
 if(TARGET SDL2::SDL2main)
     # It has an implicit dependency on SDL2 functions, so it MUST be added before SDL2::SDL2 (or SDL2::SDL2-static)
