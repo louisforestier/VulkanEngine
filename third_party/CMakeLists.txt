@@ -66,5 +66,5 @@ target_include_directories(stb_image INTERFACE stb_image)
 
 add_subdirectory(fmt)
 
-option( TRACY_ENABLE "" ON)
+option( TRACY_ENABLE "Enable profiling" OFF)
 add_subdirectory(tracy)

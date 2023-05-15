@@ -1,6 +1,7 @@
 #include <iostream>
 
 #include "vk_pipeline.h"
+#include <logger.h>
 
 VkPipeline PipelineBuilder::build_pipeline(VkDevice device, VkRenderPass pass)
 {
@@ -50,7 +51,7 @@ VkPipeline PipelineBuilder::build_pipeline(VkDevice device, VkRenderPass pass)
     VkPipeline newPipeline;
     if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &newPipeline) != VK_SUCCESS)
     {
-        std::cout << "failed to create pipeline" << std::endl;
+        LOG_ERROR("Failed to create pipeline.");
         return VK_NULL_HANDLE;
     }
     else

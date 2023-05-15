@@ -8,8 +8,11 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 
+#include <tracy/Tracy.hpp>
+
 #include <asset_loader.h>
 #include <texture_asset.h>
+#include <logger.h>
 
 bool vkutil::load_image_from_file(VulkanEngine& engine, const char* file, AllocatedImage& outImage)
 {
@@ -18,7 +21,7 @@ bool vkutil::load_image_from_file(VulkanEngine& engine, const char* file, Alloca
     stbi_uc* pixels = stbi_load(file,&texWidth,&texHeight,&texChannels,STBI_rgb_alpha);
     if (!pixels)
     {
-        std::cout << "Failed to load texture file " << file << std::endl;
+        LOG_ERROR("Failed to load texture file {}", file);
         return false;
     }
 
@@ -106,7 +109,7 @@ bool vkutil::load_image_from_file(VulkanEngine& engine, const char* file, Alloca
 
     vmaDestroyBuffer(engine._allocator,stagingBuffer._buffer,stagingBuffer._allocation);
 
-    std::cout << "Texture loaded successfully " << file << std::endl;
+    LOG_SUCCESS("Texture loaded successfully {}.", file);
 
     outImage=newImage;
     return true;
@@ -185,7 +188,7 @@ bool vkutil::load_image_from_asset(VulkanEngine& engine, const char* filename, A
 
     if (!loaded)
     {
-        std::cerr << "Error when loading image " << filename << std::endl;
+        LOG_ERROR("Error when loading image {}", filename);
         return false;
     }
     
@@ -209,12 +212,16 @@ bool vkutil::load_image_from_asset(VulkanEngine& engine, const char* filename, A
     void* data;
     vmaMapMemory(engine._allocator,stagingBuffer._allocation,&data);
 
-    assets::unpackTexture(&textureInfo,file.binaryBlob.data(),file.binaryBlob.size(),(char*) data);
+    {
+        ZoneScopedNC("Unpack texture", tracy::Color::Magenta);
+        assets::unpackTexture(&textureInfo,file.binaryBlob.data(),file.binaryBlob.size(),(char*) data);
+    }
+    
     vmaUnmapMemory(engine._allocator,stagingBuffer._allocation);
     outImage = uploadImage(textureInfo.pixelsize[0],textureInfo.pixelsize[1],textureFormat,engine,stagingBuffer);
 
     vmaDestroyBuffer(engine._allocator,stagingBuffer._buffer,stagingBuffer._allocation);
-    std::cout << "Texture loaded successfully " << filename << std::endl;
+    LOG_SUCCESS("Texture loaded successfully {}.", filename);
 
     return true;
 }

@@ -19,10 +19,12 @@
 #include <glm/gtx/transform.hpp>
 
 #include <tracy/Tracy.hpp>
+#include <tracy/TracyVulkan.hpp>
 
 #include "cvars.h"
 #include "logger.h"
 #include "vk_pipeline.h"
+#include "vk_profiler.h"
 
 #define VMA_IMPLEMENTATION
 #include <vk_mem_alloc.h>
@@ -39,8 +41,10 @@ AutoCVar_Int CVAR_OutputIndirectToFile("culling.outputIndirectBufferToFile", "ou
 #pragma region init
 
 void VulkanEngine::init()
-{
+{	
+	ZoneScopedN("Engine Init");
 	Logger::Get().set_time();
+	LOG_TRACE("Engine Init");
 	// We initialize SDL and create a window with it.
 	SDL_Init(SDL_INIT_VIDEO);
 
@@ -54,9 +58,14 @@ void VulkanEngine::init()
 		_windowExtent.height,
 		window_flags);
 
+	_renderables.reserve(10000);
 	// load the core vulkan structures
 	init_vulkan();
 
+	_profiler = vkutil::VulkanProfiler();
+
+	_profiler.init(_device, _gpuProperties.limits.timestampPeriod);
+	
 	// create the swapchain
 	init_swapchain();
 
@@ -145,7 +154,7 @@ void VulkanEngine::init_vulkan()
 
 	_gpuProperties = physicalDevice._properties;
 
-	std::cout << " The GPU has a minimum buffer alignment of " << _gpuProperties.limits.minUniformBufferOffsetAlignment << std::endl;
+	LOG_INFO("The GPU has a minimum buffer alignment of {}", _gpuProperties.limits.minUniformBufferOffsetAlignment);
 }
 
 void VulkanEngine::init_imgui()
@@ -286,6 +295,8 @@ void VulkanEngine::init_commands()
 			vkDestroyCommandPool(_device,_frames[i]._commandPool,nullptr);
 		});
 	}
+
+	_graphicsQueueContext = TracyVkContext(_chosenGPU, _device, _graphicsQueue, _frames[0]._mainCommandBuffer);
 
 	VkCommandPoolCreateInfo uploadCommandPoolInfo = vkinit::command_pool_create_finfo(_graphicsQueueFamily);
 	VK_CHECK(vkCreateCommandPool(_device,&uploadCommandPoolInfo,nullptr,&_uploadContext._commandPool));
@@ -605,40 +616,40 @@ void VulkanEngine::init_pipelines()
 	VkShaderModule triangleFragShader;
 	if (!load_shader_module("../shaders/colored_triangle.frag.spv", &triangleFragShader))
 	{
-		std::cout << "Error when building the triangle fragment shader module." <<std::endl;
+		LOG_ERROR("Error when building the triangle fragment shader module.");
 	}
 	else
 	{
-		std::cout << "Triangle fragment shader successfully loaded." << std::endl;
+		LOG_SUCCESS("Triangle fragment shader successfully loaded.");
 	}
 
 	VkShaderModule triangleVertexShader;
 	if (!load_shader_module("../shaders/colored_triangle.vert.spv", &triangleVertexShader))
 	{
-		std::cout << "Error when building the triangle vertex shader module" << std::endl;
+		LOG_ERROR("Error when building the triangle vertex shader module");
 	}
 	else
 	{
-		std::cout << "Triangle vertex shader successfully loaded." << std::endl;
+		LOG_SUCCESS("Triangle vertex shader successfully loaded.");
 	}
 	VkShaderModule redTriangleFragShader;
 	if (!load_shader_module("../shaders/triangle.frag.spv", &redTriangleFragShader))
 	{
-		std::cout << "Error when building the triangle fragment shader module." <<std::endl;
+		LOG_ERROR("Error when building the triangle fragment shader module.");
 	}
 	else
 	{
-		std::cout << "Red Triangle fragment shader successfully loaded." << std::endl;
+		LOG_SUCCESS("Red Triangle fragment shader successfully loaded.");
 	}
 
 	VkShaderModule redTriangleVertexShader;
 	if (!load_shader_module("../shaders/triangle.vert.spv", &redTriangleVertexShader))
 	{
-		std::cout << "Error when building the triangle vertex shader module" << std::endl;
+		LOG_ERROR("Error when building the triangle vertex shader module");
 	}
 	else
 	{
-		std::cout << "Red Triangle vertex shader successfully loaded." << std::endl;
+		LOG_SUCCESS("Red Triangle vertex shader successfully loaded.");
 	}
 	
 	//build the pipeline layout that controls the inputs/outputs of the shader
@@ -754,21 +765,21 @@ void VulkanEngine::init_pipelines()
 	VkShaderModule meshVertShader;
 	if (!load_shader_module("../shaders/tri_mesh.vert.spv",&meshVertShader))
 	{
-		std::cout << "Error when building the triangle vertex shader module" << std::endl;
+		LOG_ERROR("Error when building the triangle vertex shader module");
 	}
 	else
 	{
-		std::cout << "Mesh Triangle vertex shader successfully loaded" << std::endl;
+		LOG_SUCCESS("Mesh Triangle vertex shader successfully loaded");
 	}
 
 	VkShaderModule meshFragShader;
 	if (!load_shader_module("../shaders/default_lit.frag.spv",&meshFragShader))
 	{
-		std::cout << "Error when building the triangle vertex shader module" << std::endl;
+		LOG_ERROR("Error when building the triangle vertex shader module");
 	}
 	else
 	{
-		std::cout << "Mesh Triangle fragment shader successfully loaded" << std::endl;
+		LOG_SUCCESS("Mesh Triangle fragment shader successfully loaded");
 	}
 
 	//add the other shaders
@@ -793,8 +804,13 @@ void VulkanEngine::init_pipelines()
 	VkShaderModule texturedFragShader;
 	if (!load_shader_module("../shaders/textured_lit.frag.spv",&texturedFragShader))
 	{
-		std::cout << "Error when building the textured mesh shader" << std::endl;
+		LOG_ERROR("Error when building the textured mesh shader");
 	}
+	else
+	{
+		LOG_SUCCESS("Textured mesh fragment shader successfully loaded");
+	}
+
 
 	//create pipeline layout for the textured mesh which has 3 descriptor sets
 	VkPipelineLayoutCreateInfo texturedPipelineLayoutInfo = meshPipelineLayoutInfo;
@@ -848,6 +864,8 @@ void VulkanEngine::init_pipelines()
 
 void VulkanEngine::load_meshes()
 {
+	ZoneScopedNC("Upload Mesh", tracy::Color::Orange);
+
 	Mesh triangleMesh;
 	//make the array 3 vertices long
 	triangleMesh._vertices.resize(3);
@@ -1024,6 +1042,7 @@ void VulkanEngine::cleanup()
 
 void VulkanEngine::draw()
 {
+	ZoneScopedN("Engine Draw");
 	ImGui::Render();
 
 	// wait until the gpu has finished rendering the last frame, Timeout of 1 seconds.
@@ -1032,7 +1051,10 @@ void VulkanEngine::draw()
 
 	// request image from the swapchain, one second timeout
 	uint32_t swapchainImageIndex;
-	VK_CHECK(vkAcquireNextImageKHR(_device, _swapchain, 1000000000, get_current_frame()._presentSemaphore,(VkFence)nullptr,&swapchainImageIndex));
+	{
+		ZoneScopedN("Aquire Image");
+		VK_CHECK(vkAcquireNextImageKHR(_device, _swapchain, 1000000000, get_current_frame()._presentSemaphore,(VkFence)nullptr,&swapchainImageIndex));
+	}
 
 	VkCommandBuffer cmd = get_current_frame()._mainCommandBuffer;
 
@@ -1048,29 +1070,52 @@ void VulkanEngine::draw()
 	float flash = abs(sin(_frameNumber / 120.f));
 	clearValue.color = {{0.0f, 0.0f, flash, 1.0f}};
 
-	VkClearValue depthClear;
-	depthClear.depthStencil.depth = 1.f;
+	{
+		TracyVkZone(_graphicsQueueContext, get_current_frame()._mainCommandBuffer, "All Frame");
+		ZoneScopedNC("Render Frame", tracy::Color::White);
 
-	// start the main renderpass
-	// we will use the clear color from above and the framebuffer of the index the swapchain gave us
-	VkRenderPassBeginInfo rpInfo = vkinit::renderpass_begin_info(_renderPass,_windowExtent,_framebuffers[swapchainImageIndex]);
+		PROFILER_CHECK(vkutil::VulkanScopeTimer timer(cmd, _profiler, "All Frame"));
 
-	VkClearValue clearValues[] = {clearValue,depthClear};
+		{
+			PROFILER_CHECK(vkutil::VulkanScopeTimer timer2(cmd, _profiler, "Ready Frame"));
+			sort_renderables();
+		}
+		
+		{
+			PROFILER_CHECK(vkutil::VulkanScopeTimer timer3(cmd, _profiler, "Render Pass"));
+			PROFILER_CHECK(vkutil::VulkanPipelineStatRecorder recorder(cmd, _profiler, "Rendered Primitives"));
 
-	// connect clear values
-	rpInfo.clearValueCount = 2;
-	rpInfo.pClearValues = clearValues;
+			VkClearValue depthClear;
+			depthClear.depthStencil.depth = 1.f;
 
-	vkCmdBeginRenderPass(cmd, &rpInfo, VK_SUBPASS_CONTENTS_INLINE);	
+			// start the main renderpass
+			// we will use the clear color from above and the framebuffer of the index the swapchain gave us
+			VkRenderPassBeginInfo rpInfo = vkinit::renderpass_begin_info(_renderPass,_windowExtent,_framebuffers[swapchainImageIndex]);
 
-	sort_renderables();
+			VkClearValue clearValues[] = {clearValue,depthClear};
 
-	draw_objects(cmd,_renderables.data(),_renderables.size());
+			// connect clear values
+			rpInfo.clearValueCount = 2;
+			rpInfo.pClearValues = clearValues;
 
-	ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(),cmd);
 
-	// finalize the render pass
-	vkCmdEndRenderPass(cmd);
+			vkCmdBeginRenderPass(cmd, &rpInfo, VK_SUBPASS_CONTENTS_INLINE);	
+
+			{
+				TracyVkZone(_graphicsQueueContext, get_current_frame()._mainCommandBuffer, "Render Pass");
+				draw_objects(cmd,_renderables.data(),_renderables.size());
+			}
+
+			{
+				TracyVkZone(_graphicsQueueContext, get_current_frame()._mainCommandBuffer, "Imgui Draw");
+				ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(),cmd);
+			}
+
+			// finalize the render pass
+			vkCmdEndRenderPass(cmd);
+		}
+	}
+	TracyVkCollect(_graphicsQueueContext, get_current_frame()._mainCommandBuffer);
 
 	// finalize the command buffer (we can no longer add commands, but it can now be executed)
 	VK_CHECK(vkEndCommandBuffer(cmd));
@@ -1091,9 +1136,12 @@ void VulkanEngine::draw()
 	submit.signalSemaphoreCount = 1;
 	submit.pSignalSemaphores = &get_current_frame()._renderSemaphore;
 
-	// submit command buffer to the queue and execute it.
-	// renderFence will now block until the graphic commands finish execution
-	VK_CHECK(vkQueueSubmit(_graphicsQueue, 1, &submit, get_current_frame()._renderFence));
+	{
+		ZoneScopedN("Queue Submit");
+		// submit command buffer to the queue and execute it.
+		// renderFence will now block until the graphic commands finish execution
+		VK_CHECK(vkQueueSubmit(_graphicsQueue, 1, &submit, get_current_frame()._renderFence));
+	}
 
 	// this will put the image we just rendered into the visible window
 	// we want to wait on the _renderSemaphore for that
@@ -1107,8 +1155,11 @@ void VulkanEngine::draw()
 	presentInfo.pWaitSemaphores = &get_current_frame()._renderSemaphore;
 
 	presentInfo.pImageIndices = &swapchainImageIndex;
-
-	VK_CHECK(vkQueuePresentKHR(_graphicsQueue,&presentInfo));
+	
+	{
+		ZoneScopedN("Queue Present");
+		VK_CHECK(vkQueuePresentKHR(_graphicsQueue,&presentInfo));
+	}
 
 	//increases the number of frames drawn
 	_frameNumber++;
@@ -1116,6 +1167,7 @@ void VulkanEngine::draw()
 
 void VulkanEngine::run()
 {
+	LOG_TRACE("Starting Main Loop");
 	_bQuit = false;
 	float speed = 0.05f;
 
@@ -1128,6 +1180,7 @@ void VulkanEngine::run()
 	// main loop
 	while (!_bQuit)
 	{
+		ZoneScopedN("Main Loop");
 		end = std::chrono::system_clock::now();
 		std::chrono::duration<float> elapsed_seconds = end - start;
 		_stats._frametime = elapsed_seconds.count() * 1000.f;
@@ -1137,57 +1190,69 @@ void VulkanEngine::run()
 		glm::vec3 velocity(0.f);
 		// Handle events on queue
 		SDL_Event e;
-		while (SDL_PollEvent(&e) != 0)
 		{
-			ImGui_ImplSDL2_ProcessEvent(&e);
-			handle_event(e);
-		}
-		if (_front) velocity.z += speed;
-		if (_back)	velocity.z -= speed;
-		if (_left)	velocity.x += speed;
-		if (_right) velocity.x -= speed;
-		_camPos += velocity;
-		ImGui_ImplVulkan_NewFrame();
-		ImGui_ImplSDL2_NewFrame(_window);
+			ZoneScopedNC("Event Loop", tracy::Color::White);
 
-		ImGui::NewFrame();
-		
-		//imgui commands
-		if (ImGui::BeginMainMenuBar())
-		{
-			if (ImGui::BeginMenu("Debug"))
+			while (SDL_PollEvent(&e) != 0)
 			{
-				if (ImGui::BeginMenu("CVAR"))
-				{
-					CVarSystem::Get()->DrawImguiEditor();
-					ImGui::EndMenu();
-				}
-				ImGui::EndMenu();				
+				ImGui_ImplSDL2_ProcessEvent(&e);
+				handle_event(e);
 			}
-			ImGui::EndMainMenuBar();			
+			if (_front) velocity.z += speed;
+			if (_back)	velocity.z -= speed;
+			if (_left)	velocity.x += speed;
+			if (_right) velocity.x -= speed;
+			_camPos += velocity;			
 		}
 
-		//todo set et update les stats.
-		ImGui::Begin("engine");
-		ImGui::Text("FPS: %d", int(1000.f / _stats._frametime));
-		ImGui::Text("Frametimes: %f ms", _stats._frametime);
-		ImGui::Text("Objects: %d", _stats._objects);
-		ImGui::Text("Drawcalls: %d", _stats._draws);
-		ImGui::Text("Batches: %d", _stats._draws);
-		ImGui::Text("Triangles: %d", _stats._triangles);
+		{		
+			ZoneScopedNC("Imgui Logic", tracy::Color::Grey);
+			ImGui_ImplVulkan_NewFrame();
+			ImGui_ImplSDL2_NewFrame(_window);
 
-		CVAR_OutputIndirectToFile.Set(false);
-		if (ImGui::Button("Output Indirect"))
-		{
-			CVAR_OutputIndirectToFile.Set(true);
+			ImGui::NewFrame();
+			
+			//imgui commands
+			if (ImGui::BeginMainMenuBar())
+			{
+				if (ImGui::BeginMenu("Debug"))
+				{
+					if (ImGui::BeginMenu("CVAR"))
+					{
+						CVarSystem::Get()->DrawImguiEditor();
+						ImGui::EndMenu();
+					}
+					ImGui::EndMenu();				
+				}
+				ImGui::EndMainMenuBar();			
+			}
+
+			//todo set et update les stats.
+			ImGui::Begin("engine");
+			ImGui::Text("FPS: %d", int(1000.f / _stats._frametime));
+			ImGui::Text("Frametimes: %f ms", _stats._frametime);
+			ImGui::Text("Objects: %d", _stats._objects);
+			ImGui::Text("Drawcalls: %d", _stats._draws);
+			ImGui::Text("Batches: %d", _stats._draws);
+			ImGui::Text("Triangles: %d", _stats._triangles);
+
+			CVAR_OutputIndirectToFile.Set(false);
+			if (ImGui::Button("Output Indirect"))
+			{
+				CVAR_OutputIndirectToFile.Set(true);
+			}
+
+			ImGui::Separator();
+			for (auto& [k, v] : _profiler._timing)
+			{
+				ImGui::Text("Time %s %f ms", k.c_str(), v);
+			}
+			for (auto& [k, v] : _profiler._stats)
+			{
+				ImGui::Text("Stat %s %d", k.c_str(), v);
+			}			
+			ImGui::End();						
 		}
-
-		ImGui::Separator();
-		ImGui::End();
-		
-		
-		
-
 		draw();
 	}
 }
@@ -1310,6 +1375,7 @@ void VulkanEngine::sort_renderables()
 
 void VulkanEngine::draw_objects(VkCommandBuffer cmd, RenderObject* first, int count)
 {
+	ZoneScopedNC("DrawObjects", tracy::Color::Blue);
 	//make model view matrix
 	//camera view 
 	glm::mat4 view = glm::translate(glm::mat4(1.f),_camPos);
@@ -1362,58 +1428,61 @@ void VulkanEngine::draw_objects(VkCommandBuffer cmd, RenderObject* first, int co
 	_stats._objects = 0;
 	_stats._triangles = 0;
 
-
-	Mesh* lastMesh = nullptr;
-	Material* lastMaterial = nullptr;
-	
-	_stats._objects = count;
-
-	for (int i = 0; i < count; i++)
 	{
-		RenderObject& object = first[i];
+		ZoneScopedNC("Draw Commit", tracy::Color::Blue4);
 
-		//only bind the pipeline if it doesn't match with the already bound one
-		if (object.material != lastMaterial)
+		Mesh* lastMesh = nullptr;
+		Material* lastMaterial = nullptr;
+		
+		_stats._objects = count;
+
+		for (int i = 0; i < count; i++)
 		{
-			vkCmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,object.material->pipeline);
-			lastMaterial = object.material;
-			
-			uint32_t uniform_offset = pad_uniform_buffer_size(sizeof(GPUSceneData)) * frameIndex;
-			//bind the descriptor set when changing pipeline
-			vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,object.material->pipelineLayout,0,1,&get_current_frame()._globalDescriptor,1,&uniform_offset);
+			RenderObject& object = first[i];
 
-			//object data descriptor
-			vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,object.material->pipelineLayout,1,1,&get_current_frame()._objectDescriptor,0,nullptr);
-
-			if (object.material->textureSet != VK_NULL_HANDLE)
+			//only bind the pipeline if it doesn't match with the already bound one
+			if (object.material != lastMaterial)
 			{
-				//texture descriptor
-				vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,object.material->pipelineLayout,2,1,&object.material->textureSet,0,nullptr);
+				vkCmdBindPipeline(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,object.material->pipeline);
+				lastMaterial = object.material;
+				
+				uint32_t uniform_offset = pad_uniform_buffer_size(sizeof(GPUSceneData)) * frameIndex;
+				//bind the descriptor set when changing pipeline
+				vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,object.material->pipelineLayout,0,1,&get_current_frame()._globalDescriptor,1,&uniform_offset);
+
+				//object data descriptor
+				vkCmdBindDescriptorSets(cmd,VK_PIPELINE_BIND_POINT_GRAPHICS,object.material->pipelineLayout,1,1,&get_current_frame()._objectDescriptor,0,nullptr);
+
+				if (object.material->textureSet != VK_NULL_HANDLE)
+				{
+					//texture descriptor
+					vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,object.material->pipelineLayout,2,1,&object.material->textureSet,0,nullptr);
+				}
 			}
+
+			glm::mat4 model = object.transformMatrix;
+
+			MeshPushConstants constants;
+			constants.model = model;
+
+			//upload the mesh to the gpu via push constants
+			vkCmdPushConstants(cmd,object.material->pipelineLayout,VK_SHADER_STAGE_VERTEX_BIT,0,sizeof(MeshPushConstants), &constants);
+
+			//only bind the mesh if it's a different one from last bind
+			if (object.mesh != lastMesh)
+			{
+				VkDeviceSize offset = 0;
+				vkCmdBindVertexBuffers(cmd,0,1,&object.mesh->_vertexBuffer._buffer,&offset);
+				lastMesh = object.mesh;
+			}
+
+			//finally the drawcall
+			vkCmdDraw(cmd,object.mesh->_vertices.size(),1,0,i);
+			_stats._draws++;
+			_stats._triangles += static_cast<int32_t>(object.mesh->_vertices.size() / 3);
+			_stats._drawcalls++;
 		}
-
-		glm::mat4 model = object.transformMatrix;
-
-		MeshPushConstants constants;
-		constants.model = model;
-
-		//upload the mesh to the gpu via push constants
-		vkCmdPushConstants(cmd,object.material->pipelineLayout,VK_SHADER_STAGE_VERTEX_BIT,0,sizeof(MeshPushConstants), &constants);
-
-		//only bind the mesh if it's a different one from last bind
-		if (object.mesh != lastMesh)
-		{
-			VkDeviceSize offset = 0;
-			vkCmdBindVertexBuffers(cmd,0,1,&object.mesh->_vertexBuffer._buffer,&offset);
-			lastMesh = object.mesh;
-		}
-
-		//finally the drawcall
-		vkCmdDraw(cmd,object.mesh->_vertices.size(),1,0,i);
-		_stats._draws++;
-		_stats._triangles += static_cast<int32_t>(object.mesh->_vertices.size() / 3);
-		_stats._drawcalls++;
-	}
+	}	
 }
 
 FrameData& VulkanEngine::get_current_frame()
@@ -1454,6 +1523,8 @@ size_t VulkanEngine::pad_uniform_buffer_size(size_t originalSize)
 
 void VulkanEngine::immediate_submit(std::function<void(VkCommandBuffer cmd)>&& function)
 {
+	ZoneScopedNC("Immediate Submit", tracy::Color::White);
+
 	VkCommandBuffer cmd = _uploadContext._commandBuffer;
 
 	//begin command buffer recording. we will use this command buffer exactly once before resetting so we tell vulkan that.
@@ -1481,6 +1552,7 @@ void VulkanEngine::immediate_submit(std::function<void(VkCommandBuffer cmd)>&& f
 
 void VulkanEngine::load_images()
 {
+	ZoneScopedNC("Load textures", tracy::Color::Yellow);
 	Texture lostEmpire;
 
 	vkutil::load_image_from_asset(*this,"../assets/lost_empire-RGBA.tx",lostEmpire.image);

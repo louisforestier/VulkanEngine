@@ -2,7 +2,7 @@
 #include <set>
 #include <map>
 #include <vk_device_selector.h>
-
+#include <logger.h>
 
 VulkanDeviceSelector::VulkanDeviceSelector(VulkanInstance& instance, VkSurfaceKHR surface)
 : _instance(instance._instance), _surface(surface) 
@@ -141,7 +141,7 @@ int VulkanDeviceSelector::rateDeviceSuitability(VkPhysicalDevice device)
         score += 100;
     }
     score += getMaxUsableSampleCount(device);
-    std::cout << "Device name: " << deviceProperties.deviceName << "; Score: " << score << std::endl;
+    LOG_INFO("Device name: {} - Score= {}", deviceProperties.deviceName,score);
     return score;
 }
 

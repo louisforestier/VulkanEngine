@@ -14,11 +14,15 @@
 #include <vk_textures.h>
 #include <vk_types.h>
 #include <vk_descriptors.h>
+#include <vk_profiler.h>
 
 #include <glm/glm.hpp>
 
 union SDL_Event;
 struct SDL_KeyboardEvent;
+namespace tracy { class VkCtx; }
+
+
 
 struct MeshPushConstants
 {
@@ -162,6 +166,8 @@ public:
 
 	VkQueue _graphicsQueue; // queue we will submit to
 	uint32_t _graphicsQueueFamily; // family of that queue
+	tracy::VkCtx* _graphicsQueueContext;
+
 	VkQueue _presentQueue; // queue we will present to
 	uint32_t _presentQueueFamily; // family of that queue
 
@@ -181,6 +187,7 @@ public:
 
 	vkutil::DescriptorAllocator _descriptorAllocator;
 	vkutil::DescriptorLayoutCache _descriptorLayoutCache;
+	vkutil::VulkanProfiler _profiler;
 
 	VkDescriptorSetLayout _globalSetLayout;
 	VkDescriptorPool _descriptorPool;

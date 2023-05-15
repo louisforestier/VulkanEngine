@@ -9,6 +9,7 @@
 #include <vk_mem_alloc.h>
 #include <vector>
 #include <iostream>
+#include <logger.h>
 //we want to immediately abort when there is an error. In normal engines this would give an error message to the user, or perform a dump of state.
 #define VK_CHECK(x)                                                 \
 	do                                                              \
@@ -16,7 +17,7 @@
 		VkResult err = x;                                           \
 		if (err)                                                    \
 		{                                                           \
-			std::cout <<"Detected Vulkan error: " << err << std::endl; \
+            LOG_ERROR("Detected Vulkan error: {}.", err);           \
 			abort();                                                \
 		}                                                           \
 	} while (0)

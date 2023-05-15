@@ -4,6 +4,7 @@
 #include <vk_mesh.h>
 #include <asset_loader.h>
 #include <mesh_asset.h>
+#include <logger.h>
 
 VertexInputDescription Vertex::get_vertex_description()
 {
@@ -71,13 +72,13 @@ bool Mesh::load_from_obj(const char* filename)
     //make sur to output the warnings to the console, in case there are issues with the file
     if (!warn.empty())
     {
-        std::cout << "WARN: " << warn << std::endl;
+        LOG_WARNING(warn);
     }
     //if error break the mesh loading
     //happens if file not found or malformed
     if (!err.empty())
     {
-        std::cerr << err << std::endl;
+        LOG_ERROR(err);
         return false;
     }
     
@@ -140,7 +141,7 @@ bool Mesh::loadFromAsset(const char* filename)
 
     if (!loaded)
     {
-        std::cerr << "Error when loading mesh " << filename << std::endl;
+        LOG_ERROR("Error when loading mesh {}", filename);
         return false;
     }
     

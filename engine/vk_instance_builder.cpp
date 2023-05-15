@@ -1,6 +1,8 @@
 #include "vk_instance_builder.h"
 #include <cstring>
 
+#include <logger.h>
+
 VulkanInstanceBuilder& VulkanInstanceBuilder::setApiVersion(uint32_t major, uint32_t minor, uint32_t patch)
 {
     _apiVersion = VK_MAKE_VERSION(major, minor, patch);
@@ -88,16 +90,16 @@ VKAPI_ATTR VkBool32 VKAPI_CALL VulkanInstanceBuilder::debugCallback(
     const VkDebugUtilsMessengerCallbackDataEXT *pCallbackData,
     void *pUserData)
 {
-    std::cerr << "validation layer: " << pCallbackData->pMessage << std::endl;
+    LOG_ERROR("validation layer: {}", pCallbackData->pMessage);
 
     if (messageType == VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT)
-
-        std::cerr << "A specification violation or potential error has occurred." << std::endl;
+    {
+        LOG_ERROR("A specification violation or potential error has occurred.");
+    }
     else if (messageType == VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT)
-        std::cerr << "Potentially non-optimal use of Vulkan." << std::endl;
-
+        LOG_ERROR("Potentially non-optimal use of Vulkan.");
     if (messageSeverity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
-        std::cerr << "validation layer: " << pCallbackData->pMessage << std::endl;
+        LOG_ERROR("validation layer: {}", pCallbackData->pMessage);
     if (messageSeverity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)
         return VK_TRUE;
     return VK_FALSE;
