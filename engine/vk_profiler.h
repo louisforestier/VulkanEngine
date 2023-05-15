@@ -1,5 +1,7 @@
 #pragma once
 
+#include <array>
+#include <unordered_map>
 #include <vk_types.h>
 
 #define PROFILING
@@ -25,7 +27,6 @@ namespace vkutil
     {
         uint32_t _query;
         std::string _name;
-
     };
 
     class VulkanScopeTimer
