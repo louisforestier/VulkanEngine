@@ -1,4 +1,4 @@
-﻿#include "vk_engine.h"
+#include "vk_engine.h"
 #include "vk_instance_builder.h"
 #include "vk_device_selector.h"
 #include "vk_device_builder.h"
@@ -7,7 +7,7 @@
 #include <SDL_vulkan.h>
 
 #include <imgui.h>
-#include <imgui_impl_sdl.h>
+#include <imgui_impl_sdl2.h>
 #include <imgui_impl_vulkan.h>
 
 #include <vk_initializers.h>
