@@ -14,14 +14,14 @@
 #include <texture_asset.h>
 #include <logger.h>
 
-bool vkutil::load_image_from_file(VulkanEngine& engine, const char* file, AllocatedImage& outImage)
+bool vkutil::load_image_from_file(VulkanEngine& engine, const std::string& filename, AllocatedImage& outImage)
 {
     int texWidth, texHeight, texChannels;
 
-    stbi_uc* pixels = stbi_load(file,&texWidth,&texHeight,&texChannels,STBI_rgb_alpha);
+    stbi_uc* pixels = stbi_load(filename.c_str(),&texWidth,&texHeight,&texChannels,STBI_rgb_alpha);
     if (!pixels)
     {
-        LOG_ERROR("Failed to load texture file {}", file);
+        LOG_ERROR("Failed to load texture file {}", filename);
         return false;
     }
 
@@ -102,14 +102,14 @@ bool vkutil::load_image_from_file(VulkanEngine& engine, const char* file, Alloca
         //barrier the image into the shader readable layout
         vkCmdPipelineBarrier(cmd,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,0,0,nullptr,0,nullptr,1,&imageBarrierToReadable);
     });
-
+    VmaAllocator& allocator = engine._allocator;
     engine._mainDeletionQueue.push_function([=](){
-        vmaDestroyImage(engine._allocator,newImage._image,newImage._allocation);
+        vmaDestroyImage(allocator,newImage._image,newImage._allocation);
     });
 
     vmaDestroyBuffer(engine._allocator,stagingBuffer._buffer,stagingBuffer._allocation);
 
-    LOG_SUCCESS("Texture loaded successfully {}.", file);
+    LOG_SUCCESS("Texture loaded successfully {}.", filename);
 
     outImage=newImage;
     return true;
@@ -174,14 +174,14 @@ AllocatedImage uploadImage(int texWidth, int texHeight, VkFormat textureFormat, 
         //barrier the image into the shader readable layout
         vkCmdPipelineBarrier(cmd,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,0,0,nullptr,0,nullptr,1,&imageBarrierToReadable);
     });
-
+    VmaAllocator& allocator = engine._allocator;
     engine._mainDeletionQueue.push_function([=](){
-        vmaDestroyImage(engine._allocator,newImage._image,newImage._allocation);
+        vmaDestroyImage(allocator,newImage._image,newImage._allocation);
     });
     return newImage;
 }
 
-bool vkutil::load_image_from_asset(VulkanEngine& engine, const char* filename, AllocatedImage& outImage)
+bool vkutil::load_image_from_asset(VulkanEngine& engine, const std::string& filename, AllocatedImage& outImage)
 {
     assets::AssetFile file;
     bool loaded = assets::loadBinaryFile(filename, file);
@@ -199,7 +199,7 @@ bool vkutil::load_image_from_asset(VulkanEngine& engine, const char* filename, A
     switch (textureInfo.textureFormat)
     {
     case assets::TextureFormat::RGBA8:
-        textureFormat = VK_FORMAT_R8G8B8A8_UNORM;
+        textureFormat = VK_FORMAT_R8G8B8A8_SRGB;
         break;
     
     default:

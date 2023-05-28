@@ -13,9 +13,9 @@ VulkanDeviceSelector::VulkanDeviceSelector(VulkanInstance& instance, VkSurfaceKH
 }
 
 
-VulkanDeviceSelector& VulkanDeviceSelector::setApiVersion(uint32_t major, uint32_t minor, uint32_t patch)
+VulkanDeviceSelector& VulkanDeviceSelector::setApiVersion(uint32_t variant, uint32_t major, uint32_t minor, uint32_t patch)
 {
-    _apiVersion = VK_MAKE_VERSION(major,minor,patch);
+    _apiVersion = VK_MAKE_API_VERSION(variant,major,minor,patch);
     return *this;
 }
 

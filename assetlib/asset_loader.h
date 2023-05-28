@@ -18,9 +18,9 @@ namespace assets
         LZ4
     };
 
-    bool saveBinaryFile(const char* path, const AssetFile& file);
+    bool saveBinaryFile(const std::string& path, const AssetFile& file);
 
-    bool loadBinaryFile(const char* path, AssetFile& outputFile);
+    bool loadBinaryFile(const std::string& path, AssetFile& outputFile);
 
     CompressionMode parse_compression(const std::string& format);
     

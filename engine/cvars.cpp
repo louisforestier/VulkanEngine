@@ -45,8 +45,8 @@ struct CVarArray
     }
 
     ~CVarArray()
-    {
-        delete _cvars;
+    {        
+        delete[] _cvars;
     }
 
     T GetCurrent(int32_t index)

@@ -1,7 +1,7 @@
 #include "asset_loader.h"
 #include <fstream>
 
-bool assets::saveBinaryFile(const char* path, const assets::AssetFile& file)
+bool assets::saveBinaryFile(const std::string& path, const assets::AssetFile& file)
 {
     std::ofstream outfile;
     outfile.open(path, std::ios::binary | std::ios::out);
@@ -33,7 +33,7 @@ bool assets::saveBinaryFile(const char* path, const assets::AssetFile& file)
 }
 
 
-bool assets::loadBinaryFile(const char* path, assets::AssetFile& outputFile)
+bool assets::loadBinaryFile(const std::string& path, assets::AssetFile& outputFile)
 {
     std::ifstream infile;
     infile.open(path,std::ios::binary);

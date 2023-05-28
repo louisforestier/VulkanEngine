@@ -7,7 +7,7 @@ class VulkanInstanceBuilder {
 public:
 
 
-    VulkanInstanceBuilder& setApiVersion(uint32_t major, uint32_t minor, uint32_t patch);
+    VulkanInstanceBuilder& setApiVersion(uint32_t variant, uint32_t major, uint32_t minor, uint32_t patch);
 
     VulkanInstanceBuilder& setAppName(const char* name);
 

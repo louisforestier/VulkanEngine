@@ -53,7 +53,7 @@ VertexInputDescription Vertex::get_vertex_description()
     return description;
 }
 
-bool Mesh::load_from_obj(const char* filename)
+bool Mesh::load_from_obj(const std::string& filename)
 {
     //attrib will contain the vertex arrays of the file
     tinyobj::attrib_t attrib;
@@ -67,7 +67,7 @@ bool Mesh::load_from_obj(const char* filename)
     std::string err;
 
     //load the obj file
-    tinyobj::LoadObj(&attrib,&shapes,&materials,&warn,&err,filename,nullptr);
+    tinyobj::LoadObj(&attrib,&shapes,&materials,&warn,&err,filename.c_str(),nullptr);
 
     //make sur to output the warnings to the console, in case there are issues with the file
     if (!warn.empty())
@@ -134,7 +134,7 @@ bool Mesh::load_from_obj(const char* filename)
     return true;
 }
 
-bool Mesh::loadFromAsset(const char* filename)
+bool Mesh::loadFromAsset(const std::string& filename)
 {
     assets::AssetFile file;
     bool loaded = assets::loadBinaryFile(filename, file);

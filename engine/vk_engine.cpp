@@ -40,10 +40,14 @@ AutoCVar_Int CVAR_OutputIndirectToFile("culling.outputIndirectBufferToFile", "ou
 
 #pragma region init
 
+VulkanEngine::VulkanEngine(const char *shaderPath, const char *assetsPath)
+: _shaderPath(shaderPath), _assetsPath(assetsPath)
+{
+}
+
 void VulkanEngine::init()
 {	
 	ZoneScopedN("Engine Init");
-	Logger::Get().set_time();
 	LOG_TRACE("Engine Init");
 	// We initialize SDL and create a window with it.
 	SDL_Init(SDL_INIT_VIDEO);
@@ -64,7 +68,7 @@ void VulkanEngine::init()
 
 	_profiler = vkutil::VulkanProfiler();
 
-	_profiler.init(_device, _gpuProperties.limits.timestampPeriod);
+	PROFILER_CHECK(_profiler.init(_device, _gpuProperties.limits.timestampPeriod));
 	
 	// create the swapchain
 	init_swapchain();
@@ -106,7 +110,7 @@ void VulkanEngine::init_vulkan()
 	// make the vulkan instance, with basic debug features
 	VulkanInstance vbInst = builder.setAppName("VulkanEngine Demo")
 													   .enableValidationLayers(enableValidationLayers)
-													   .setApiVersion(1, 1, 0)
+													   .setApiVersion(0, 1, 1, 0)
 													   .addExtensions(extensions)
 													   .setEngineName("ForestierEngiiiine")
 													   .build()
@@ -122,7 +126,7 @@ void VulkanEngine::init_vulkan()
 	VulkanDeviceSelector selector(vbInst,_surface);
 
 	VulkanPhysicalDevice physicalDevice = selector
-											.setApiVersion(1, 1, 0)
+											.setApiVersion(0, 1, 1, 0)
 											.select()
 											.value();
 
@@ -148,7 +152,7 @@ void VulkanEngine::init_vulkan()
 	allocatorInfo.instance = _instance;
 	vmaCreateAllocator(&allocatorInfo,&_allocator);
 
-	_mainDeletionQueue.push_function([&](){
+	_mainDeletionQueue.push_function([=](){
 		vmaDestroyAllocator(_allocator);
 	});
 
@@ -461,10 +465,11 @@ void VulkanEngine::init_sync_structures()
 	}
 }
 
-bool VulkanEngine::load_shader_module(const char* filePath, VkShaderModule* outShaderModule)
+bool VulkanEngine::load_shader_module(const std::string& filePath, VkShaderModule* outShaderModule)
 {
+	const std::string path(_shaderPath+filePath+".spv");
 	//open the file, with cursor at the end
-	std::ifstream file(filePath,std::ios::ate | std::ios::binary);
+	std::ifstream file(path,std::ios::ate | std::ios::binary);
 		
 	if (!file.is_open())
 	{
@@ -597,12 +602,8 @@ void VulkanEngine::init_descriptors()
 	}
 
 
-	_mainDeletionQueue.push_function([&](){
+	_mainDeletionQueue.push_function([=](){
 		vmaDestroyBuffer(_allocator,_sceneParametersBuffer._buffer,_sceneParametersBuffer._allocation);
-		vkDestroyDescriptorSetLayout(_device,_objectSetLayout,nullptr);
-		vkDestroyDescriptorSetLayout(_device,_globalSetLayout,nullptr);
-		vkDestroyDescriptorSetLayout(_device,_singleTextureSetLayout,nullptr);
-		vkDestroyDescriptorPool(_device,_descriptorPool,nullptr);
 		for (int i = 0; i < FRAME_OVERLAP; i++)
 		{				
 			vmaDestroyBuffer(_allocator,_frames[i]._cameraBuffer._buffer,_frames[i]._cameraBuffer._allocation);			
@@ -614,7 +615,7 @@ void VulkanEngine::init_descriptors()
 void VulkanEngine::init_pipelines()
 {
 	VkShaderModule triangleFragShader;
-	if (!load_shader_module("../shaders/colored_triangle.frag.spv", &triangleFragShader))
+	if (!load_shader_module("colored_triangle.frag", &triangleFragShader))
 	{
 		LOG_ERROR("Error when building the triangle fragment shader module.");
 	}
@@ -624,7 +625,7 @@ void VulkanEngine::init_pipelines()
 	}
 
 	VkShaderModule triangleVertexShader;
-	if (!load_shader_module("../shaders/colored_triangle.vert.spv", &triangleVertexShader))
+	if (!load_shader_module("colored_triangle.vert", &triangleVertexShader))
 	{
 		LOG_ERROR("Error when building the triangle vertex shader module");
 	}
@@ -633,7 +634,7 @@ void VulkanEngine::init_pipelines()
 		LOG_SUCCESS("Triangle vertex shader successfully loaded.");
 	}
 	VkShaderModule redTriangleFragShader;
-	if (!load_shader_module("../shaders/triangle.frag.spv", &redTriangleFragShader))
+	if (!load_shader_module("triangle.frag", &redTriangleFragShader))
 	{
 		LOG_ERROR("Error when building the triangle fragment shader module.");
 	}
@@ -643,7 +644,7 @@ void VulkanEngine::init_pipelines()
 	}
 
 	VkShaderModule redTriangleVertexShader;
-	if (!load_shader_module("../shaders/triangle.vert.spv", &redTriangleVertexShader))
+	if (!load_shader_module("triangle.vert", &redTriangleVertexShader))
 	{
 		LOG_ERROR("Error when building the triangle vertex shader module");
 	}
@@ -763,7 +764,7 @@ void VulkanEngine::init_pipelines()
 	//compile mesh vertex shader
 
 	VkShaderModule meshVertShader;
-	if (!load_shader_module("../shaders/tri_mesh.vert.spv",&meshVertShader))
+	if (!load_shader_module("tri_mesh.vert",&meshVertShader))
 	{
 		LOG_ERROR("Error when building the triangle vertex shader module");
 	}
@@ -773,7 +774,7 @@ void VulkanEngine::init_pipelines()
 	}
 
 	VkShaderModule meshFragShader;
-	if (!load_shader_module("../shaders/default_lit.frag.spv",&meshFragShader))
+	if (!load_shader_module("default_lit.frag",&meshFragShader))
 	{
 		LOG_ERROR("Error when building the triangle vertex shader module");
 	}
@@ -802,7 +803,7 @@ void VulkanEngine::init_pipelines()
 
 	//textured pipeline
 	VkShaderModule texturedFragShader;
-	if (!load_shader_module("../shaders/textured_lit.frag.spv",&texturedFragShader))
+	if (!load_shader_module("textured_lit.frag",&texturedFragShader))
 	{
 		LOG_ERROR("Error when building the textured mesh shader");
 	}
@@ -881,10 +882,10 @@ void VulkanEngine::load_meshes()
 	triangleMesh._vertices[2].color = {0.f,1.f,0.f};
 
 	Mesh monkeyMesh;
-	monkeyMesh.loadFromAsset("../assets/monkey_smooth.mesh");
+	monkeyMesh.loadFromAsset(_assetsPath+"monkey_smooth.mesh");
 
 	Mesh lostEmpire{};
-	lostEmpire.loadFromAsset("../assets/lost_empire.mesh");
+	lostEmpire.loadFromAsset(_assetsPath+"lost_empire.mesh");
 
 	//no vertex normals for now
 	upload_mesh(triangleMesh);
@@ -916,7 +917,7 @@ void VulkanEngine::upload_mesh(Mesh& mesh)
 
 	//copy vertex data
 	void* data;
-	vmaMapMemory(_allocator, stagingBuffer._allocation, &data);
+	VK_CHECK(vmaMapMemory(_allocator, stagingBuffer._allocation, &data));
 
 	memcpy(data, mesh._vertices.data(),mesh._vertices.size() * sizeof(Vertex));
 
@@ -1026,6 +1027,10 @@ void VulkanEngine::cleanup()
 		vkDeviceWaitIdle(_device);
 
 		_mainDeletionQueue.flush();
+		TracyVkDestroy(_graphicsQueueContext);
+		_profiler.cleanup();
+		_descriptorAllocator.cleanup();
+		_descriptorLayoutCache.cleanup();
 		
 		vkDestroyDevice(_device, nullptr);
 		vkDestroySurfaceKHR(_instance, _surface, nullptr);
@@ -1069,7 +1074,7 @@ void VulkanEngine::draw()
 	VkClearValue clearValue;
 	float flash = abs(sin(_frameNumber / 120.f));
 	clearValue.color = {{0.0f, 0.0f, flash, 1.0f}};
-
+	PROFILER_CHECK(_profiler.grab_queries(cmd));
 	{
 		TracyVkZone(_graphicsQueueContext, get_current_frame()._mainCommandBuffer, "All Frame");
 		ZoneScopedNC("Render Frame", tracy::Color::White);
@@ -1392,7 +1397,7 @@ void VulkanEngine::draw_objects(VkCommandBuffer cmd, RenderObject* first, int co
 
 	//copy it to the buffer
 	void* data;
-	vmaMapMemory(_allocator,get_current_frame()._cameraBuffer._allocation,&data);
+	VK_CHECK(vmaMapMemory(_allocator,get_current_frame()._cameraBuffer._allocation,&data));
 
 	memcpy(data,&camData,sizeof(GPUCameraData));
 
@@ -1402,7 +1407,7 @@ void VulkanEngine::draw_objects(VkCommandBuffer cmd, RenderObject* first, int co
 	_sceneParameters.ambientColor = {sin(framed),0,cos(framed),1};
 
 	char* sceneData;
-	vmaMapMemory(_allocator,_sceneParametersBuffer._allocation,(void**)&sceneData);
+	VK_CHECK(vmaMapMemory(_allocator,_sceneParametersBuffer._allocation,(void**)&sceneData));
 
 	int frameIndex = _frameNumber % FRAME_OVERLAP;
 
@@ -1413,7 +1418,7 @@ void VulkanEngine::draw_objects(VkCommandBuffer cmd, RenderObject* first, int co
 	vmaUnmapMemory(_allocator,_sceneParametersBuffer._allocation);
 
 	void* objectData;
-	vmaMapMemory(_allocator,get_current_frame()._objectBuffer._allocation,&objectData);
+	VK_CHECK(vmaMapMemory(_allocator,get_current_frame()._objectBuffer._allocation,&objectData));
 	GPUObjectData* objectSSBO = (GPUObjectData*)objectData;
 	
 	for (int i = 0; i < count; i++)
@@ -1555,7 +1560,7 @@ void VulkanEngine::load_images()
 	ZoneScopedNC("Load textures", tracy::Color::Yellow);
 	Texture lostEmpire;
 
-	vkutil::load_image_from_asset(*this,"../assets/lost_empire-RGBA.tx",lostEmpire.image);
+	vkutil::load_image_from_asset(*this,_assetsPath+"lost_empire-RGBA.tx",lostEmpire.image);
 
 	VkImageViewCreateInfo imageinfo = vkinit::imageview_create_info(VK_FORMAT_R8G8B8A8_SRGB, lostEmpire.image._image,VK_IMAGE_ASPECT_COLOR_BIT);
 	vkCreateImageView(_device,&imageinfo,nullptr,&lostEmpire.imageView);

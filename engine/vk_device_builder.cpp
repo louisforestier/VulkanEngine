@@ -45,7 +45,7 @@ void VulkanDeviceBuilder::createLogicalDevice()
         for (size_t i = 0; i < _pNextChain.size () - 1; i++) {
             _pNextChain.at (i)->pNext = _pNextChain.at (i + 1);
         }
-    	createInfo.pNext = _pNextChain.at (0);
+    	createInfo.pNext = _pNextChain.at(0);
     }
 
     createInfo.enabledExtensionCount = static_cast<uint32_t>(_physicalDevice._extensions.size());

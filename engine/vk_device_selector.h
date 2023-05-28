@@ -6,7 +6,7 @@ class VulkanDeviceSelector
 public:
     VulkanDeviceSelector(VulkanInstance& instance, VkSurfaceKHR surface);
 
-    VulkanDeviceSelector& setApiVersion(uint32_t major, uint32_t minor, uint32_t patch);
+    VulkanDeviceSelector& setApiVersion(uint32_t variant, uint32_t major, uint32_t minor, uint32_t patch);
 
     VulkanDeviceSelector& addExtension(const char* requiredExtension);
 

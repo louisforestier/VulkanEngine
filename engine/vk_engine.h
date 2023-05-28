@@ -1,4 +1,4 @@
-﻿// vulkan_guide.h : Include file for standard system include files,
+// vulkan_guide.h : Include file for standard system include files,
 // or project specific include files.
 
 #pragma once
@@ -21,8 +21,6 @@
 union SDL_Event;
 struct SDL_KeyboardEvent;
 namespace tracy { class VkCtx; }
-
-
 
 struct MeshPushConstants
 {
@@ -132,7 +130,7 @@ struct Texture;
 
 class VulkanEngine {
 public:
-
+	VulkanEngine(const char* shaderPath, const char* assetsPath);
 
 	bool _isInitialized{ false };
 	int _frameNumber {0};
@@ -243,7 +241,7 @@ private:
 	void init_scene();
 
 	//load a shader module from a spir-v file. Returns false if it errors.
-	bool load_shader_module(const char* filePath, VkShaderModule* outShaderModule);
+	bool load_shader_module(const std::string& filePath, VkShaderModule* outShaderModule);
 
 	void init_descriptors();
 
@@ -280,4 +278,6 @@ private:
 	void handle_key_up(const SDL_KeyboardEvent& event);
 
 	EngineStats _stats;
+	const std::string _shaderPath;
+	const std::string _assetsPath;
 };

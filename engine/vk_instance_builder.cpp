@@ -3,9 +3,9 @@
 
 #include <logger.h>
 
-VulkanInstanceBuilder& VulkanInstanceBuilder::setApiVersion(uint32_t major, uint32_t minor, uint32_t patch)
+VulkanInstanceBuilder& VulkanInstanceBuilder::setApiVersion(uint32_t variant, uint32_t major, uint32_t minor, uint32_t patch)
 {
-    _apiVersion = VK_MAKE_VERSION(major, minor, patch);
+    _apiVersion = VK_MAKE_API_VERSION(variant, major, minor, patch);
     return *this;
 }
 
@@ -127,7 +127,7 @@ void VulkanInstanceBuilder::createInstance()
     appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
     appInfo.pEngineName = _engineName != nullptr ? _engineName : "";
     appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
-    appInfo.apiVersion = VK_API_VERSION_1_0;
+    appInfo.apiVersion = VK_API_VERSION_1_1;
     VkInstanceCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     createInfo.pApplicationInfo = &appInfo;
