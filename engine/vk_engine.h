@@ -1,4 +1,4 @@
-// vulkan_guide.h : Include file for standard system include files,
+﻿// vulkan_guide.h : Include file for standard system include files,
 // or project specific include files.
 
 #pragma once
@@ -15,11 +15,18 @@
 #include <vk_types.h>
 #include <vk_descriptors.h>
 #include <vk_profiler.h>
+#include "transform.h"
+#include "camera.h"
+#include "event_handler.h"
 
 #include <glm/glm.hpp>
 
+
 union SDL_Event;
 struct SDL_KeyboardEvent;
+struct SDL_MouseButtonEvent;
+struct SDL_MouseMotionEvent;
+
 namespace tracy { class VkCtx; }
 
 struct MeshPushConstants
@@ -209,9 +216,10 @@ public:
 
 	std::unordered_map<std::string,Texture> _loadedTextures;
 
-
-
-	glm::vec3 _camPos;
+	std::unique_ptr<Camera> _playerCamera;
+	Transform _playerTransform;
+	std::unique_ptr<SDLEventHandler> _cameraController;
+	
 	bool _bQuit;
 	bool _front{};
 	bool _back{};
@@ -270,12 +278,6 @@ private:
 
 	//draw function
 	void draw_objects(VkCommandBuffer cmd, RenderObject* first, int count);
-
-	void handle_event(const SDL_Event& e);
-
-	void handle_key_down(const SDL_KeyboardEvent& event);
-	
-	void handle_key_up(const SDL_KeyboardEvent& event);
 
 	EngineStats _stats;
 	const std::string _shaderPath;

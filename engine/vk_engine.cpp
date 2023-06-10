@@ -1,4 +1,4 @@
-#include "vk_engine.h"
+﻿#include "vk_engine.h"
 #include "vk_instance_builder.h"
 #include "vk_device_selector.h"
 #include "vk_device_builder.h"
@@ -17,6 +17,7 @@
 #include <functional>
 
 #include <glm/gtx/transform.hpp>
+#include <glm/gtx/string_cast.hpp>
 
 #include <tracy/Tracy.hpp>
 #include <tracy/TracyVulkan.hpp>
@@ -25,6 +26,8 @@
 #include "logger.h"
 #include "vk_pipeline.h"
 #include "vk_profiler.h"
+#include "imgui_widgets.h"
+#include "fly_animator.h"
 
 #define VMA_IMPLEMENTATION
 #include <vk_mem_alloc.h>
@@ -958,7 +961,9 @@ void VulkanEngine::upload_mesh(Mesh& mesh)
 
 void VulkanEngine::init_scene()
 {
-	_camPos = { 0.f,-6.f,-10.f};
+	_playerCamera = std::make_unique<PerspectiveCamera>(70.f,900.f,1700.f,0.1f,200.f);
+	_playerTransform.translate({ 0.f,6.f,10.f});
+	_cameraController = std::make_unique<FlyAnimator>(_playerTransform);
 
 	RenderObject monkey;
 	monkey.mesh = get_mesh("monkey");
@@ -1031,7 +1036,7 @@ void VulkanEngine::cleanup()
 		_profiler.cleanup();
 		_descriptorAllocator.cleanup();
 		_descriptorLayoutCache.cleanup();
-		
+
 		vkDestroyDevice(_device, nullptr);
 		vkDestroySurfaceKHR(_instance, _surface, nullptr);
 		if (enableValidationLayers)
@@ -1051,7 +1056,7 @@ void VulkanEngine::draw()
 	ImGui::Render();
 
 	// wait until the gpu has finished rendering the last frame, Timeout of 1 seconds.
-	VK_CHECK(vkWaitForFences(_device, 1, &get_current_frame()._renderFence, true, 1000000000));
+	VK_CHECK(vkWaitForFences(_device, 1, &get_current_frame()._renderFence, true, UINT64_MAX));
 	VK_CHECK(vkResetFences(_device, 1, &get_current_frame()._renderFence));
 
 	// request image from the swapchain, one second timeout
@@ -1192,7 +1197,6 @@ void VulkanEngine::run()
 
 		start = std::chrono::system_clock::now();
 
-		glm::vec3 velocity(0.f);
 		// Handle events on queue
 		SDL_Event e;
 		{
@@ -1200,14 +1204,12 @@ void VulkanEngine::run()
 
 			while (SDL_PollEvent(&e) != 0)
 			{
-				ImGui_ImplSDL2_ProcessEvent(&e);
-				handle_event(e);
+				if(ImGui::GetIO().WantCaptureMouse || ImGui::GetIO().WantCaptureMouse)
+					ImGui_ImplSDL2_ProcessEvent(&e);
+				else _cameraController->handleSDLEvent(e);
+				if (e.type ==  SDL_QUIT)
+					_bQuit = true;	
 			}
-			if (_front) velocity.z += speed;
-			if (_back)	velocity.z -= speed;
-			if (_left)	velocity.x += speed;
-			if (_right) velocity.x -= speed;
-			_camPos += velocity;			
 		}
 
 		{		
@@ -1257,76 +1259,15 @@ void VulkanEngine::run()
 				ImGui::Text("Stat %s %d", k.c_str(), v);
 			}			
 			ImGui::End();						
+
+			TransformWidget(_playerTransform);
 		}
+
+		_cameraController->update(_stats._frametime);
+		_playerTransform.update();
 		draw();
 	}
 }
-
-void VulkanEngine::handle_event(const SDL_Event& e)
-{
-	// close the window when user alt-f4s or clicks the X button
-	switch (e.type)
-	{
-	case SDL_QUIT:
-		_bQuit = true;
-		break;
-	case SDL_KEYDOWN:
-		handle_key_down(e.key);
-		break;
-	case SDL_KEYUP:
-		handle_key_up(e.key);
-		break;
-	default:
-		break;
-	}
-}
-
-void VulkanEngine::handle_key_down(const SDL_KeyboardEvent& event)
-{
-	if (event.repeat == 0)
-	{
-		if (event.keysym.scancode == SDL_SCANCODE_W)
-		{
-			_front = true;
-		}
-		if (event.keysym.scancode == SDL_SCANCODE_S)
-		{
-			_back = true;
-		}
-		if (event.keysym.scancode == SDL_SCANCODE_A)
-		{
-			_left = true;
-		}
-		if (event.keysym.scancode == SDL_SCANCODE_D)
-		{
-			_right = true;
-		}
-	}	
-}
-	
-void VulkanEngine::handle_key_up(const SDL_KeyboardEvent& event)
-{
-	if (event.repeat == 0)
-	{
-		if (event.keysym.scancode == SDL_SCANCODE_W)
-		{
-			_front = false;
-		}
-		if (event.keysym.scancode == SDL_SCANCODE_S)
-		{
-			_back = false;
-		}
-		if (event.keysym.scancode == SDL_SCANCODE_A)
-		{
-			_left = false;
-		}
-		if (event.keysym.scancode == SDL_SCANCODE_D)
-		{
-			_right = false;
-		}
-	}	
-}
-
 
 Material* VulkanEngine::create_material(VkPipeline pipeline, VkPipelineLayout layout, const std::string& name)
 {
@@ -1383,10 +1324,10 @@ void VulkanEngine::draw_objects(VkCommandBuffer cmd, RenderObject* first, int co
 	ZoneScopedNC("DrawObjects", tracy::Color::Blue);
 	//make model view matrix
 	//camera view 
-	glm::mat4 view = glm::translate(glm::mat4(1.f),_camPos);
+	glm::mat4 view = _playerCamera->get_view_matrix(_playerTransform);
 
 	//camera projection
-	glm::mat4 projection = glm::perspective(glm::radians(70.f),1700.f/900.f,0.1f,200.f);
+	glm::mat4 projection = _playerCamera->get_projection_matrix();
 	projection[1][1] *= -1;
 
 	//fill a GPU camera data struct
@@ -1548,7 +1489,7 @@ void VulkanEngine::immediate_submit(std::function<void(VkCommandBuffer cmd)>&& f
 	//_uploadFence will now block until the graphics commands finish execution
 	VK_CHECK(vkQueueSubmit(_graphicsQueue,1,&submit,_uploadContext._uploadFence));
 
-	vkWaitForFences(_device,1, &_uploadContext._uploadFence,true,9999999999);
+	vkWaitForFences(_device,1, &_uploadContext._uploadFence,true,UINT64_MAX);
 	vkResetFences(_device,1,&_uploadContext._uploadFence);
 
 	//reset the command buffers inside the command pool
