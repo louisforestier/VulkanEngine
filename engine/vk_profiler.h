@@ -1,6 +1,8 @@
 #pragma once
 
 #include <vk_types.h>
+#include <array>
+#include <unordered_map>
 
 #define PROFILING
 
