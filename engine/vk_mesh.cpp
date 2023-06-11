@@ -147,7 +147,7 @@ bool Mesh::loadFromAsset(const std::string& filename)
     
     assets::MeshInfo meshInfo = assets::readMeshInfo(&file);
 
-
+    
     std::vector<char> vertexBuffer;
     std::vector<char> indexBuffer;
 
@@ -157,11 +157,14 @@ bool Mesh::loadFromAsset(const std::string& filename)
     assets::unpackMesh(&meshInfo,file.binaryBlob.data(),file.binaryBlob.size(),vertexBuffer.data(),indexBuffer.data());
 
     _vertices.clear();
-    
+    _indices.clear();
 
-    assets::Vertex* unpackedVertices = reinterpret_cast<assets::Vertex*>(vertexBuffer.data());
+    uint32_t* unpackedIndices = reinterpret_cast<uint32_t*>(indexBuffer.data());
+    _indices.resize(indexBuffer.size() / sizeof(uint32_t));
+    _indices.insert(_indices.end(),unpackedIndices,unpackedIndices+indexBuffer.size() / sizeof(uint32_t));
 
     _vertices.resize(vertexBuffer.size() / sizeof(assets::Vertex));
+    assets::Vertex* unpackedVertices = reinterpret_cast<assets::Vertex*>(vertexBuffer.data());
 
     for (size_t i = 0; i < _vertices.size(); i++)
     {
