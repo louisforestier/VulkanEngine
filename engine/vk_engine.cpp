@@ -903,12 +903,14 @@ void VulkanEngine::load_meshes()
 
 void VulkanEngine::upload_mesh(Mesh& mesh)
 {
-	const size_t bufferSize = mesh._vertices.size() * sizeof(Vertex);
+	const size_t verticesBufferSize = mesh._vertices.size() * sizeof(Vertex);
+	const size_t indicesBufferSize = mesh._indices.size() * sizeof(uint32_t);
+
 	//allocate staging buffer on cpu
 	VkBufferCreateInfo stagingBufferInfo{};
 	stagingBufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
 	stagingBufferInfo.pNext = nullptr;
-	stagingBufferInfo.size = bufferSize;
+	stagingBufferInfo.size = verticesBufferSize + indicesBufferSize;
 	stagingBufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
 
 	VmaAllocationCreateInfo vmaallocInfo{};
@@ -919,10 +921,11 @@ void VulkanEngine::upload_mesh(Mesh& mesh)
 	VK_CHECK(vmaCreateBuffer(_allocator,&stagingBufferInfo,&vmaallocInfo,&stagingBuffer._buffer,&stagingBuffer._allocation,nullptr));
 
 	//copy vertex data
-	void* data;
-	VK_CHECK(vmaMapMemory(_allocator, stagingBuffer._allocation, &data));
+	char* data;
+	VK_CHECK(vmaMapMemory(_allocator, stagingBuffer._allocation, (void**)&data));
 
-	memcpy(data, mesh._vertices.data(),mesh._vertices.size() * sizeof(Vertex));
+	memcpy(data, mesh._vertices.data(),verticesBufferSize);
+	memcpy(data + verticesBufferSize, mesh._indices.data(),indicesBufferSize);
 
 	vmaUnmapMemory(_allocator,stagingBuffer._allocation);
 
@@ -931,7 +934,7 @@ void VulkanEngine::upload_mesh(Mesh& mesh)
 	vertexBufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
 	vertexBufferInfo.pNext = nullptr;
 	//this is the total size in bytes of the allocated buffer
-	vertexBufferInfo.size = bufferSize;
+	vertexBufferInfo.size = verticesBufferSize;
 	//this buffer is going to be used as vertex buffer
 	vertexBufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 
@@ -941,19 +944,39 @@ void VulkanEngine::upload_mesh(Mesh& mesh)
 	//allocate the buffer
 	VK_CHECK(vmaCreateBuffer(_allocator,&vertexBufferInfo,&vmaallocInfo,&mesh._vertexBuffer._buffer,&mesh._vertexBuffer._allocation,nullptr));
 
+	if (indicesBufferSize > 0)
+	{
+		//allocate index buffer on gpu
+		VkBufferCreateInfo indexBufferInfo{};
+		indexBufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+		indexBufferInfo.pNext = nullptr;
+		indexBufferInfo.size = indicesBufferSize;
+		indexBufferInfo.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+
+		VK_CHECK(vmaCreateBuffer(_allocator, &indexBufferInfo, &vmaallocInfo, &mesh._indexBuffer._buffer, &mesh._indexBuffer._allocation, nullptr));		
+	}
+
 	//add destruction of mesh buffer to the deletion queue
 	_mainDeletionQueue.push_function([=](){
 		vmaDestroyBuffer(_allocator, mesh._vertexBuffer._buffer, mesh._vertexBuffer._allocation);
+		if (indicesBufferSize > 0)
+			vmaDestroyBuffer(_allocator, mesh._vertexBuffer._buffer, mesh._indexBuffer._allocation);
 	});
 
 	immediate_submit([=](VkCommandBuffer cmd){
 		VkBufferCopy copy;
 		copy.dstOffset = 0;
 		copy.srcOffset = 0;
-		copy.size = bufferSize;
+		copy.size = verticesBufferSize;
 		vkCmdCopyBuffer(cmd,stagingBuffer._buffer,mesh._vertexBuffer._buffer,1,&copy);
+		if (indicesBufferSize > 0)
+		{
+			copy.dstOffset = 0;
+			copy.srcOffset = verticesBufferSize;
+			copy.size = indicesBufferSize;
+			vkCmdCopyBuffer(cmd,stagingBuffer._buffer,mesh._indexBuffer._buffer,1,&copy);
+		}
 	});
-
 
 	//destroy the staging buffer, copy was done so can be freed immediately
 	vmaDestroyBuffer(_allocator,stagingBuffer._buffer,stagingBuffer._allocation);
@@ -1419,13 +1442,23 @@ void VulkanEngine::draw_objects(VkCommandBuffer cmd, RenderObject* first, int co
 			{
 				VkDeviceSize offset = 0;
 				vkCmdBindVertexBuffers(cmd,0,1,&object.mesh->_vertexBuffer._buffer,&offset);
+				if (object.mesh->_indices.size() > 0)
+					vkCmdBindIndexBuffer(cmd, object.mesh->_indexBuffer._buffer,0,VK_INDEX_TYPE_UINT32);
 				lastMesh = object.mesh;
 			}
 
 			//finally the drawcall
-			vkCmdDraw(cmd,object.mesh->_vertices.size(),1,0,i);
+			if (object.mesh->_indices.size()>0)
+			{
+				vkCmdDrawIndexed(cmd, object.mesh->_indices.size(),1,0,0,i);
+				_stats._triangles += static_cast<int32_t>(object.mesh->_indices.size());
+			}
+			else
+			{
+				vkCmdDraw(cmd,object.mesh->_vertices.size(),1,0,i);
+				_stats._triangles += static_cast<int32_t>(object.mesh->_vertices.size() / 3);
+			}
 			_stats._draws++;
-			_stats._triangles += static_cast<int32_t>(object.mesh->_vertices.size() / 3);
 			_stats._drawcalls++;
 		}
 	}	
