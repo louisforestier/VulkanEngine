@@ -226,7 +226,7 @@ public:
 	bool _left{};
 	bool _right{};
 
-	AllocatedBuffer create_buffer(size_t allocSize,VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage);
+	AllocatedBuffer create_buffer(size_t allocSize,VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage, VkMemoryPropertyFlags requiredFlags = 0);
 
 	void immediate_submit(std::function<void(VkCommandBuffer cmd)>&& function);
 
