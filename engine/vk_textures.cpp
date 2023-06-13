@@ -207,7 +207,7 @@ bool vkutil::load_image_from_asset(VulkanEngine& engine, const std::string& file
         break;
     }
 
-    AllocatedBuffer stagingBuffer = engine.create_buffer(textureSize,VK_BUFFER_USAGE_TRANSFER_SRC_BIT,VMA_MEMORY_USAGE_CPU_ONLY);
+    AllocatedBuffer stagingBuffer = engine.create_buffer(textureSize,VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_UNKNOWN, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT);
 
     void* data;
     vmaMapMemory(engine._allocator,stagingBuffer._allocation,&data);
