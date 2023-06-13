@@ -236,7 +236,7 @@ void VulkanEngine::init_swapchain()
 
 	VulkanSwapchain vkbSwapchain = swapchainBuilder
 									  // use vsync present mode
-									  .setPresentMode(VK_PRESENT_MODE_FIFO_KHR)
+									  .setPresentMode(VK_PRESENT_MODE_MAILBOX_KHR)
 									  .setExtent(_windowExtent.width, _windowExtent.height)
 									  .build()
 									  .value();
@@ -1469,7 +1469,7 @@ FrameData& VulkanEngine::get_current_frame()
 	return _frames[_frameNumber % FRAME_OVERLAP];
 }
 
-AllocatedBuffer VulkanEngine::create_buffer(size_t allocSize,VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage)
+AllocatedBuffer VulkanEngine::create_buffer(size_t allocSize,VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage, VkMemoryPropertyFlags requiredFlags)
 {
 	VkBufferCreateInfo bufferInfo{};
 	bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -1480,6 +1480,7 @@ AllocatedBuffer VulkanEngine::create_buffer(size_t allocSize,VkBufferUsageFlags 
 
 	VmaAllocationCreateInfo vmaallocInfo{};
 	vmaallocInfo.usage = memoryUsage;
+	vmaallocInfo.requiredFlags = requiredFlags;
 	
 	AllocatedBuffer buffer;
 
