@@ -81,6 +81,7 @@ struct FrameData
 	AllocatedBuffer _objectBuffer;
 	VkDescriptorSet _objectDescriptor;
 	
+	AllocatedBuffer _instanceBuffer;
 };
 
 struct GPUObjectData
