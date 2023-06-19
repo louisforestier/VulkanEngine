@@ -18,6 +18,7 @@
 #include "transform.h"
 #include "camera.h"
 #include "event_handler.h"
+#include "vk_scene.h"
 
 #include <glm/glm.hpp>
 
@@ -43,12 +44,6 @@ struct Material
 	VkPipelineLayout pipelineLayout;
 };
 
-struct RenderObject
-{
-	Mesh* mesh;
-	Material* material;
-	glm::mat4 transformMatrix;
-};
 
 struct GPUCameraData
 {
@@ -278,9 +273,10 @@ private:
 	void sort_renderables();	
 
 	//draw function
-	void draw_objects(VkCommandBuffer cmd, RenderObject* first, int count);
+	void draw_objects(VkCommandBuffer cmd, const std::vector<InstanceBatch>& instances);
 
 	EngineStats _stats;
 	const std::string _shaderPath;
 	const std::string _assetsPath;
+	RenderScene _scene;
 };

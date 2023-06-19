@@ -1148,7 +1148,7 @@ void VulkanEngine::draw()
 
 			{
 				TracyVkZone(_graphicsQueueContext, get_current_frame()._mainCommandBuffer, "Render Pass");
-				draw_objects(cmd,_renderables.data(),_renderables.size());
+				draw_objects(cmd,_scene.getAllInstances());
 			}
 
 			{
@@ -1300,6 +1300,7 @@ void VulkanEngine::run()
 
 		_cameraController->update(_stats._frametime);
 		_playerTransform.update();
+		_scene.buildInstances(_renderables);
 		draw();
 	}
 }
@@ -1354,7 +1355,7 @@ void VulkanEngine::sort_renderables()
 	});	
 }
 
-void VulkanEngine::draw_objects(VkCommandBuffer cmd, RenderObject* first, int count)
+void VulkanEngine::draw_objects(VkCommandBuffer cmd, const std::vector<InstanceBatch>& instances)
 {
 	ZoneScopedNC("DrawObjects", tracy::Color::Blue);
 	//make model view matrix
@@ -1393,15 +1394,13 @@ void VulkanEngine::draw_objects(VkCommandBuffer cmd, RenderObject* first, int co
 
 	vmaUnmapMemory(_allocator,_sceneParametersBuffer._allocation);
 
-	void* objectData;
-	VK_CHECK(vmaMapMemory(_allocator,get_current_frame()._objectBuffer._allocation,&objectData));
-	GPUObjectData* objectSSBO = (GPUObjectData*)objectData;
+	std::vector<glm::mat4>& transforms = _scene.getAllTransforms();
+	int count = transforms.size();
+
+	void* objectSSBO;
+	VK_CHECK(vmaMapMemory(_allocator,get_current_frame()._objectBuffer._allocation,&objectSSBO));
 	
-	for (int i = 0; i < count; i++)
-	{
-		RenderObject& object = first[i];
-		objectSSBO[i].modelMatrix = object.transformMatrix;
-	}
+	memcpy(objectSSBO,transforms.data(),transforms.size() * sizeof(GPUObjectData));
 	vmaUnmapMemory(_allocator,get_current_frame()._objectBuffer._allocation);
 	
 	_stats._drawcalls = 0;
@@ -1420,70 +1419,12 @@ void VulkanEngine::draw_objects(VkCommandBuffer cmd, RenderObject* first, int co
 
 		{
 			ZoneScopedNC("Draw Loop", tracy::Color::Blue2);
-			struct RenderBatch
-			{
-				RenderObject* object;
-				uint64_t sortKey;
-				uint64_t objectIndex;
-			};
-
-			std::vector<RenderBatch> batches;
-			batches.resize(count);
-			for (int i = 0 ; i < count ; i++)
-			{
-				RenderObject* object = &first[i];
-				batches[i].object = object;
-				batches[i].objectIndex = i;
-				uint64_t materialHash = std::hash<void*>()(object->material) & UINT32_MAX;
-				uint64_t meshHash = std::hash<void*>()(object->mesh) & UINT32_MAX;
-				batches[i].sortKey = materialHash << 32 | meshHash;
-			}
-
-			std::sort(batches.begin(), batches.end(), [](const RenderBatch& a, const RenderBatch& b){
-				return a.sortKey < b.sortKey;
-			});
-
+			
+			std::vector<uint32_t>& instanceIndex = _scene.getInstanceData();
 			uint32_t* instanceData;
 			vmaMapMemory(_allocator,get_current_frame()._instanceBuffer._allocation,(void**)&instanceData);
-			for (int i = 0 ; i < count ; i++)
-			{
-				instanceData[i] = batches[i].objectIndex;
-			}
+			memcpy(instanceData, instanceIndex.data(), instanceIndex.size() * sizeof(uint32_t));
 			vmaUnmapMemory(_allocator,get_current_frame()._instanceBuffer._allocation);
-
-			struct InstanceBatch 
-			{
-				Mesh* mesh;
-				Material* material;
-				uint64_t first;
-				uint64_t count;
-			};
-			std::vector<InstanceBatch> instances;
-			instances.reserve(count / 3);
-
-			InstanceBatch newBatch;
-			newBatch.first = 0;
-			newBatch.count = 0;
-			newBatch.material = batches[0].object->material;
-			newBatch.mesh = batches[0].object->mesh;
-			
-			instances.push_back(newBatch);
-
-			for (int i = 0 ; i < count ; i++)
-			{
-				RenderObject *object = batches[i].object;
-
-				if(object->mesh == instances.back().mesh && object->material == instances.back().material)
-					instances.back().count++;
-				else
-				{
-					newBatch.first = i;
-					newBatch.count = 1;
-					newBatch.material = object->material;
-					newBatch.mesh = object->mesh;
-					instances.push_back(newBatch);
-				}
-			}
 
 			for(auto& instance : instances)
 			{
