@@ -28,6 +28,7 @@
 #include "vk_profiler.h"
 #include "imgui_widgets.h"
 #include "fly_animator.h"
+#include "vk_shader.h"
 
 #define VMA_IMPLEMENTATION
 #include <vk_mem_alloc.h>
@@ -468,52 +469,6 @@ void VulkanEngine::init_sync_structures()
 	}
 }
 
-bool VulkanEngine::load_shader_module(const std::string& filePath, VkShaderModule* outShaderModule)
-{
-	const std::string path(_shaderPath+filePath+".spv");
-	//open the file, with cursor at the end
-	std::ifstream file(path,std::ios::ate | std::ios::binary);
-		
-	if (!file.is_open())
-	{
-		return false;
-	}
-
-	//find the size of the file by looking up the location of the cursor
-	//because it is at the end, it gives the size direcly in bytes
-	size_t fileSize = (size_t)file.tellg();
-
-	//spir-v expects the buffer to be on uint32, so we have to reserve an int vector big enough for the entire file
-	std::vector<uint32_t> buffer(fileSize / sizeof(uint32_t));
-
-	//put file cursor at the beginning
-	file.seekg(0);
-
-	//load the entire file into the buffer
-	file.read((char*)buffer.data(),fileSize);
-
-	file.close();
-
-	//create a new shader module, using the buffer we loaded
-	VkShaderModuleCreateInfo createInfo{};
-	createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-	createInfo.pNext = nullptr;
-
-	//codeSize has to be in bytes, so multiply the ints in the buffer by sizeof uint32 to know the real size of the buffer
-	createInfo.codeSize = buffer.size() * sizeof(uint32_t);
-	createInfo.pCode = buffer.data();
-
-	//check that the creation goes well
-	VkShaderModule shaderModule;
-	if (vkCreateShaderModule(_device,& createInfo, nullptr, &shaderModule) != VK_SUCCESS)
-	{
-		return false;
-	}
-	*outShaderModule = shaderModule;
-	
-	return true;
-}
-
 void VulkanEngine::init_descriptors()
 {
 	_descriptorAllocator.init(_device);
@@ -522,33 +477,6 @@ void VulkanEngine::init_descriptors()
 	const size_t _sceneParamBufferSize = FRAME_OVERLAP * pad_uniform_buffer_size(sizeof(GPUSceneData));
 
 	_sceneParametersBuffer = create_buffer(_sceneParamBufferSize,VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,VMA_MEMORY_USAGE_CPU_TO_GPU);
-
-	//information about the bindings
-	VkDescriptorSetLayoutBinding cameraBind = vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,VK_SHADER_STAGE_VERTEX_BIT,0);
-	VkDescriptorSetLayoutBinding sceneBind = vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,1);
-	VkDescriptorSetLayoutBinding objectBind = vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,VK_SHADER_STAGE_VERTEX_BIT,0);
-	VkDescriptorSetLayoutBinding instanceBind = vkinit::descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,VK_SHADER_STAGE_VERTEX_BIT,1);
-
-	VkDescriptorSetLayoutBinding bindings[] = {cameraBind,sceneBind};
-
-	VkDescriptorSetLayoutCreateInfo setinfo{};
-	setinfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-	setinfo.pNext = nullptr;	
-	setinfo.bindingCount = 2;
-	setinfo.flags = 0;
-	setinfo.pBindings = bindings;
-
-	_globalSetLayout = _descriptorLayoutCache.createDescriptorLayout(&setinfo);
-	VkDescriptorSetLayoutBinding bindings2[] = {objectBind,instanceBind};
-	
-	VkDescriptorSetLayoutCreateInfo set2info{};
-	set2info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-	set2info.pNext = nullptr;
-	set2info.bindingCount = 2;
-	set2info.flags = 0;
-	set2info.pBindings = bindings2;
-
-	_objectSetLayout = _descriptorLayoutCache.createDescriptorLayout(&set2info);
 
 	VkDescriptorSetLayoutBinding textureBind = vkinit:: descriptorset_layout_binding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,VK_SHADER_STAGE_FRAGMENT_BIT,0);
 
@@ -566,51 +494,7 @@ void VulkanEngine::init_descriptors()
 		const int MAX_OBJECTS = 10000;
 		_frames[i]._objectBuffer = create_buffer(sizeof(GPUObjectData) * MAX_OBJECTS,VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,VMA_MEMORY_USAGE_CPU_TO_GPU);
 		_frames[i]._instanceBuffer = create_buffer(sizeof(uint32_t) * MAX_OBJECTS,VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,VMA_MEMORY_USAGE_CPU_TO_GPU);
-
-		_frames[i]._cameraBuffer = create_buffer(sizeof(GPUCameraData),VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,VMA_MEMORY_USAGE_CPU_TO_GPU);
-	
-		//allocate one descriptor set for each frame
-		_descriptorAllocator.allocate(&_frames[i]._globalDescriptor,_globalSetLayout);
-
-		//allocate the descriptor set that will point to object buffer
-		_descriptorAllocator.allocate(&_frames[i]._objectDescriptor,_objectSetLayout);
-
-		//information about the buffer we want to point at in the descriptor
-		VkDescriptorBufferInfo cameraInfo{};
-		//bind camera buffer
-		cameraInfo.buffer = _frames[i]._cameraBuffer._buffer;
-		//at 0 offset
-		cameraInfo.offset = 0;
-		//of the size of a camera data struct
-		cameraInfo.range = sizeof(GPUCameraData);
-		
-
-		VkDescriptorBufferInfo sceneInfo{};
-		sceneInfo.buffer = _sceneParametersBuffer._buffer;
-		//for non dynamic buffer 
-		//sceneInfo.offset = pad_uniform_buffer_size(sizeof(GPUSceneData)) * i;
-		sceneInfo.offset = 0;
-		sceneInfo.range = sizeof(GPUSceneData);
-
-		vkutil::DescriptorBuilder::begin(&_descriptorLayoutCache,&_descriptorAllocator)
-		.bindBuffer(0,&cameraInfo,VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,VK_SHADER_STAGE_VERTEX_BIT)
-		.bindBuffer(1,&sceneInfo,VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC,VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT)
-		.build(_frames[i]._globalDescriptor);
-
-		VkDescriptorBufferInfo objectBufferInfo{};
-		objectBufferInfo.buffer = _frames[i]._objectBuffer._buffer;
-		objectBufferInfo.offset = 0;
-		objectBufferInfo.range = sizeof(GPUObjectData) * MAX_OBJECTS;
-
-		VkDescriptorBufferInfo instanceBufferInfo{};
-		instanceBufferInfo.buffer = _frames[i]._instanceBuffer._buffer;
-		instanceBufferInfo.offset = 0;
-		instanceBufferInfo.range = sizeof(uint32_t) * MAX_OBJECTS;
-
-		vkutil::DescriptorBuilder::begin(&_descriptorLayoutCache,&_descriptorAllocator)
-		.bindBuffer(0,&objectBufferInfo,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,VK_SHADER_STAGE_VERTEX_BIT)
-		.bindBuffer(1, &instanceBufferInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,VK_SHADER_STAGE_VERTEX_BIT)
-		.build(_frames[i]._objectDescriptor);
+		_frames[i]._cameraBuffer = create_buffer(sizeof(GPUCameraData),VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,VMA_MEMORY_USAGE_CPU_TO_GPU);			
 	}
 
 
@@ -627,63 +511,54 @@ void VulkanEngine::init_descriptors()
 
 void VulkanEngine::init_pipelines()
 {
-	VkShaderModule triangleFragShader;
-	if (!load_shader_module("colored_triangle.frag", &triangleFragShader))
-	{
-		LOG_ERROR("Error when building the triangle fragment shader module.");
-	}
-	else
-	{
-		LOG_SUCCESS("Triangle fragment shader successfully loaded.");
-	}
+	//compile mesh vertex shader
 
-	VkShaderModule triangleVertexShader;
-	if (!load_shader_module("colored_triangle.vert", &triangleVertexShader))
+	VkShaderModule meshVertShader;
+	ShaderModule meshModule;
+	if (!vkutil::load_shader_module(_device,_shaderPath+"tri_mesh.vert.spv",&meshModule))
 	{
 		LOG_ERROR("Error when building the triangle vertex shader module");
 	}
 	else
 	{
-		LOG_SUCCESS("Triangle vertex shader successfully loaded.");
+		LOG_SUCCESS("Mesh Triangle vertex shader successfully loaded");
 	}
-	VkShaderModule redTriangleFragShader;
-	if (!load_shader_module("triangle.frag", &redTriangleFragShader))
-	{
-		LOG_ERROR("Error when building the triangle fragment shader module.");
-	}
-	else
-	{
-		LOG_SUCCESS("Red Triangle fragment shader successfully loaded.");
-	}
-
-	VkShaderModule redTriangleVertexShader;
-	if (!load_shader_module("triangle.vert", &redTriangleVertexShader))
-	{
-		LOG_ERROR("Error when building the triangle vertex shader module");
-	}
-	else
-	{
-		LOG_SUCCESS("Red Triangle vertex shader successfully loaded.");
-	}
+	meshVertShader = meshModule._module;
 	
-	//build the pipeline layout that controls the inputs/outputs of the shader
-	//we are not using descriptor sets or other systems yet, so no need to use anything than empty default
-	VkPipelineLayoutCreateInfo pipelineLayoutInfo = vkinit::pipeline_layout_create_info();
+	VkShaderModule meshFragShader;
+	ShaderModule colorModule;
+	if (!vkutil::load_shader_module(_device,_shaderPath+"default_lit.frag.spv",&colorModule))
+	{
+		LOG_ERROR("Error when building the triangle vertex shader module");
+	}
+	else
+	{
+		LOG_SUCCESS("Mesh Triangle fragment shader successfully loaded");
+	}
+	meshFragShader = colorModule._module;
 
-	VkPipelineLayout trianglePipelineLayout;
+	//textured pipeline
+	VkShaderModule texturedFragShader;
+	ShaderModule texturedModule;
+	if (!vkutil::load_shader_module(_device,_shaderPath+"textured_lit.frag.spv",&texturedModule))
+	{
+		LOG_ERROR("Error when building the textured mesh shader");
+	}
+	else
+	{
+		LOG_SUCCESS("Textured mesh fragment shader successfully loaded");
+	}
+	texturedFragShader = texturedModule._module;
 
-	VK_CHECK(vkCreatePipelineLayout(_device, &pipelineLayoutInfo, nullptr, &trianglePipelineLayout));
+	ShaderEffect defaultEffect;
+	defaultEffect.add_stage(&meshModule, VK_SHADER_STAGE_VERTEX_BIT);
+	defaultEffect.add_stage(&colorModule, VK_SHADER_STAGE_FRAGMENT_BIT);
+
+	ShaderEffect::ReflectionOverrides overrides[] = {"sceneData",VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC};
+	defaultEffect.reflect_layout(_device, _descriptorLayoutCache, overrides, 1);
 
 	//build the stage create info for both vertex and fragment stages.
 	PipelineBuilder pipelineBuilder;
-
-	pipelineBuilder._shaderStages.push_back(
-		vkinit::pipeline_shader_stage_create_info(VK_SHADER_STAGE_VERTEX_BIT,triangleVertexShader)
-	);
-
-	pipelineBuilder._shaderStages.push_back(
-		vkinit::pipeline_shader_stage_create_info(VK_SHADER_STAGE_FRAGMENT_BIT,triangleFragShader)
-	);
 
 	//vertex input controls how to read vertices from vertex buffers, not used yet
 	pipelineBuilder._vertexInputInfo = vkinit::vertex_input_state_create_info();
@@ -711,55 +586,10 @@ void VulkanEngine::init_pipelines()
 	//a single blend attachment with no blending and writing to RGBA 
 	pipelineBuilder._colorBlendAttachment = vkinit::color_blend_attachment_state();
 
-	//use the triangle layout
-	pipelineBuilder._pipelineLayout = trianglePipelineLayout;
-
 	//add depth testing
 	pipelineBuilder._depthStencil = vkinit::depth_stencil_create_info(true,true,VK_COMPARE_OP_LESS_OR_EQUAL);
 
-	//build the pipeline
-	VkPipeline trianglePipeline = pipelineBuilder.build_pipeline(_device,_renderPass);
-
-	create_material(trianglePipeline,trianglePipelineLayout,"triangle");
-
-	//clear the shader stages for the builder
-	pipelineBuilder._shaderStages.clear();
-
-	//add the other shaders
-	pipelineBuilder._shaderStages.push_back(
-		vkinit::pipeline_shader_stage_create_info(VK_SHADER_STAGE_VERTEX_BIT,redTriangleVertexShader)
-	);
-	pipelineBuilder._shaderStages.push_back(
-		vkinit::pipeline_shader_stage_create_info(VK_SHADER_STAGE_FRAGMENT_BIT,redTriangleFragShader)
-	);
-
-	VkPipeline redTrianglePipeline = pipelineBuilder.build_pipeline(_device,_renderPass);
-
-	create_material(redTrianglePipeline,trianglePipelineLayout,"red triangle");
-	//create the mesh pipeline layout
-	VkPipelineLayoutCreateInfo meshPipelineLayoutInfo = vkinit::pipeline_layout_create_info();
-
-	//TODO: remove
-	//setup push constants
-	// VkPushConstantRange pushConstant;
-	// //this push constant range starts at the beginning
-	// pushConstant.offset = 0;
-	// //this push constant range takes up the size of a meshpushconstants struct
-	// pushConstant.size = sizeof(MeshPushConstants);
-	// //this push constant range is accessible only in the vertex shader
-	// pushConstant.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-
-	// meshPipelineLayoutInfo.pPushConstantRanges = &pushConstant;
-	// meshPipelineLayoutInfo.pushConstantRangeCount = 1;
-
-	VkDescriptorSetLayout setLayouts[] = {_globalSetLayout, _objectSetLayout};
-
-	meshPipelineLayoutInfo.setLayoutCount = 2;
-	meshPipelineLayoutInfo.pSetLayouts = setLayouts;
-
-	VkPipelineLayout meshPipelineLayout;
-
-	VK_CHECK(vkCreatePipelineLayout(_device,&meshPipelineLayoutInfo,nullptr,&meshPipelineLayout));
+	VkPipelineLayout meshPipelineLayout = defaultEffect._builtLayout;
 
 	//build the mesh pipeline
 	
@@ -772,32 +602,7 @@ void VulkanEngine::init_pipelines()
 	pipelineBuilder._vertexInputInfo.pVertexBindingDescriptions = vertexDescription.bindings.data();
 	pipelineBuilder._vertexInputInfo.vertexBindingDescriptionCount = vertexDescription.bindings.size();
 
-	//clear the shader stages for the builder
-	pipelineBuilder._shaderStages.clear();
-
-	//compile mesh vertex shader
-
-	VkShaderModule meshVertShader;
-	if (!load_shader_module("tri_mesh.vert",&meshVertShader))
-	{
-		LOG_ERROR("Error when building the triangle vertex shader module");
-	}
-	else
-	{
-		LOG_SUCCESS("Mesh Triangle vertex shader successfully loaded");
-	}
-
-	VkShaderModule meshFragShader;
-	if (!load_shader_module("default_lit.frag",&meshFragShader))
-	{
-		LOG_ERROR("Error when building the triangle vertex shader module");
-	}
-	else
-	{
-		LOG_SUCCESS("Mesh Triangle fragment shader successfully loaded");
-	}
-
-	//add the other shaders
+	//add the shaders
 	pipelineBuilder._shaderStages.push_back(
 		vkinit::pipeline_shader_stage_create_info(VK_SHADER_STAGE_VERTEX_BIT,meshVertShader)
 	);
@@ -814,33 +619,18 @@ void VulkanEngine::init_pipelines()
 
 	//create a default material with the mesh pipeline
 	create_material(meshPipeline,meshPipelineLayout, "defaultmesh");
+	pipelineBuilder._shaderStages.clear();
 
-	//textured pipeline
-	VkShaderModule texturedFragShader;
-	if (!load_shader_module("textured_lit.frag",&texturedFragShader))
-	{
-		LOG_ERROR("Error when building the textured mesh shader");
-	}
-	else
-	{
-		LOG_SUCCESS("Textured mesh fragment shader successfully loaded");
-	}
+	ShaderEffect texturedEffect;
+	texturedEffect.add_stage(&meshModule, VK_SHADER_STAGE_VERTEX_BIT);
+	texturedEffect.add_stage(&texturedModule, VK_SHADER_STAGE_FRAGMENT_BIT);
 
+	texturedEffect.reflect_layout(_device, _descriptorLayoutCache, overrides, 1);
 
-	//create pipeline layout for the textured mesh which has 3 descriptor sets
-	VkPipelineLayoutCreateInfo texturedPipelineLayoutInfo = meshPipelineLayoutInfo;
-
-	VkDescriptorSetLayout texturedSetLayouts[] = {_globalSetLayout, _objectSetLayout, _singleTextureSetLayout};
-
-	texturedPipelineLayoutInfo.setLayoutCount = 3;
-	texturedPipelineLayoutInfo.pSetLayouts = texturedSetLayouts;
-
-	VkPipelineLayout texturedPipeLayout;
-	VK_CHECK(vkCreatePipelineLayout(_device,&texturedPipelineLayoutInfo,nullptr,&texturedPipeLayout));
+	VkPipelineLayout texturedPipeLayout = texturedEffect._builtLayout;
 
 	pipelineBuilder._pipelineLayout = texturedPipeLayout;
 
-	pipelineBuilder._shaderStages.clear();
 	pipelineBuilder._shaderStages.push_back(
 		vkinit::pipeline_shader_stage_create_info(VK_SHADER_STAGE_VERTEX_BIT,meshVertShader)
 	);
@@ -853,24 +643,16 @@ void VulkanEngine::init_pipelines()
 
 	create_material(texPipeline,texturedPipeLayout,"texturedmesh");
 
-
 	vkDestroyShaderModule(_device,texturedFragShader,nullptr);
 	vkDestroyShaderModule(_device,meshFragShader,nullptr);
 	vkDestroyShaderModule(_device,meshVertShader,nullptr);
-	vkDestroyShaderModule(_device,redTriangleVertexShader,nullptr);
-	vkDestroyShaderModule(_device, redTriangleFragShader,nullptr);
-	vkDestroyShaderModule(_device, triangleVertexShader,nullptr);
-	vkDestroyShaderModule(_device, triangleFragShader,nullptr);
 
 	_mainDeletionQueue.push_function([=](){
 		//destroy the 2 pipelines we have created
-		vkDestroyPipeline(_device,redTrianglePipeline,nullptr);
-		vkDestroyPipeline(_device,trianglePipeline,nullptr);
 		vkDestroyPipeline(_device,meshPipeline,nullptr);
 		vkDestroyPipeline(_device,texPipeline,nullptr);
 
 		//destroy the pipeline layout that they use
-		vkDestroyPipelineLayout(_device, trianglePipelineLayout,nullptr);
 		vkDestroyPipelineLayout(_device, meshPipelineLayout,nullptr);
 		vkDestroyPipelineLayout(_device, texturedPipeLayout,nullptr);
 	});
@@ -1408,6 +1190,45 @@ void VulkanEngine::draw_objects(VkCommandBuffer cmd, const std::vector<InstanceB
 	_stats._objects = 0;
 	_stats._triangles = 0;
 
+	//information about the buffer we want to point at in the descriptor
+	VkDescriptorBufferInfo cameraInfo{};
+	//bind camera buffer
+	cameraInfo.buffer = get_current_frame()._cameraBuffer._buffer;
+	//at 0 offset
+	cameraInfo.offset = 0;
+	//of the size of a camera data struct
+	cameraInfo.range = sizeof(GPUCameraData);
+	
+
+	VkDescriptorBufferInfo sceneInfo{};
+	sceneInfo.buffer = _sceneParametersBuffer._buffer;
+	//for non dynamic buffer 
+	//sceneInfo.offset = pad_uniform_buffer_size(sizeof(GPUSceneData)) * i;
+	sceneInfo.offset = 0;
+	sceneInfo.range = sizeof(GPUSceneData);
+
+	VkDescriptorSet GlobalSet;
+	vkutil::DescriptorBuilder::begin(&_descriptorLayoutCache,&_descriptorAllocator)
+	.bindBuffer(0,&cameraInfo,VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,VK_SHADER_STAGE_VERTEX_BIT)
+	.bindBuffer(1,&sceneInfo,VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, VK_SHADER_STAGE_FRAGMENT_BIT)
+	.build(GlobalSet);
+
+	VkDescriptorBufferInfo objectBufferInfo{};
+	objectBufferInfo.buffer = get_current_frame()._objectBuffer._buffer;
+	objectBufferInfo.offset = 0;
+	objectBufferInfo.range = sizeof(GPUObjectData) * 10000;
+
+	VkDescriptorBufferInfo instanceBufferInfo{};
+	instanceBufferInfo.buffer = get_current_frame()._instanceBuffer._buffer;
+	instanceBufferInfo.offset = 0;
+	instanceBufferInfo.range = sizeof(uint32_t) * 10000;
+
+	VkDescriptorSet ObjectDataSet;
+	vkutil::DescriptorBuilder::begin(&_descriptorLayoutCache,&_descriptorAllocator)
+	.bindBuffer(0,&objectBufferInfo,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,VK_SHADER_STAGE_VERTEX_BIT)
+	.bindBuffer(1, &instanceBufferInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,VK_SHADER_STAGE_VERTEX_BIT)
+	.build(ObjectDataSet);
+
 	{
 		ZoneScopedNC("Draw Commit", tracy::Color::Blue4);
 
@@ -1440,10 +1261,10 @@ void VulkanEngine::draw_objects(VkCommandBuffer cmd, const std::vector<InstanceB
 						lastPipeline = drawMat->pipeline;	
 						uint32_t uniform_offset = pad_uniform_buffer_size(sizeof(GPUSceneData)) * frameIndex;
 						// bind the descriptor set when changing pipeline
-						vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, drawMat->pipelineLayout, 0, 1, &get_current_frame()._globalDescriptor, 1, &uniform_offset);
+						vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, drawMat->pipelineLayout, 0, 1, &GlobalSet, 1, &uniform_offset);
 
 						// object data descriptor
-						vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, drawMat->pipelineLayout, 1, 1, &get_current_frame()._objectDescriptor, 0, nullptr);
+						vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, drawMat->pipelineLayout, 1, 1, &ObjectDataSet, 0, nullptr);
 					}
 					lastMaterial = drawMat;
 					if (drawMat->textureSet != VK_NULL_HANDLE)

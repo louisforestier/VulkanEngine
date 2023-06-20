@@ -244,9 +244,6 @@ private:
 
 	void init_scene();
 
-	//load a shader module from a spir-v file. Returns false if it errors.
-	bool load_shader_module(const std::string& filePath, VkShaderModule* outShaderModule);
-
 	void init_descriptors();
 
 	void init_pipelines();
