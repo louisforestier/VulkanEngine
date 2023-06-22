@@ -26,8 +26,7 @@ jobs:
       
 
     - name: Dependencies
-      run: |
-        sudo apt-get install mesa-common-dev
+      run: sudo apt-get install libsdl2-dev mesa-common-dev
 
     - name: Setup Vulkan SDK - edvn0
       uses: edvn0/setup-vulkan-sdk@v1.3.0
