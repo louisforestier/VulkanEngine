@@ -1008,6 +1008,7 @@ void VulkanEngine::run()
 	while (!_bQuit)
 	{
 		ZoneScopedN("Main Loop");
+		if (SDL_GetWindowFlags(_window) & SDL_WINDOW_MINIMIZED) continue;
 		end = std::chrono::system_clock::now();
 		std::chrono::duration<float> elapsed_seconds = end - start;
 		_stats._frametime = elapsed_seconds.count() * 1000.f;
