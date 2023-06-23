@@ -70,7 +70,8 @@
         "typeindex": "cpp",
         "valarray": "cpp",
         "variant": "cpp",
-        "semaphore": "cpp"
+        "semaphore": "cpp",
+        "cassert": "cpp"
     },
     "cmake.debugConfig": {
         "args": [

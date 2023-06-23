@@ -70,3 +70,10 @@ struct VulkanSwapchain
     std::vector<VkImageView> _imagesviews;
     VkFormat _imageFormat;
 };
+
+enum class MeshPassType : uint8_t {
+	None = 0,
+	Forward = 1,
+	Transparency = 2,
+	DirectionalShadow = 3
+};

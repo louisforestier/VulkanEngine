@@ -3,6 +3,7 @@ set(CMAKE_CXX_STANDARD 17)
 add_library (assetlib  
 "mesh_asset.cpp"
 "mesh_asset.h"
+"material_asset.h"
 "texture_asset.h"
 "texture_asset.cpp"
 "asset_loader.h"
